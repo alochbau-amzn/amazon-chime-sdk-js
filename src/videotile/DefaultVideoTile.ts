@@ -12,6 +12,8 @@ import VideoTileState from './VideoTileState';
 
 export default class DefaultVideoTile implements DevicePixelRatioObserver, VideoTile {
   private tileState: VideoTileState = new VideoTileState();
+  private videoStreamContentWidth: number;
+  private videoStreamContentHeight: number;
 
   static connectVideoStreamToVideoElement(
     videoStream: MediaStream,
@@ -170,10 +172,12 @@ export default class DefaultVideoTile implements DevicePixelRatioObserver, Video
     }
     if (this.tileState.videoStreamContentWidth !== contentWidth) {
       this.tileState.videoStreamContentWidth = contentWidth;
+      this.videoStreamContentWidth = contentWidth;
       tileUpdated = true;
     }
     if (this.tileState.videoStreamContentHeight !== contentHeight) {
       this.tileState.videoStreamContentHeight = contentHeight;
+      this.videoStreamContentHeight = contentHeight;
       tileUpdated = true;
     }
     if (this.tileState.streamId !== streamId) {
@@ -258,6 +262,7 @@ export default class DefaultVideoTile implements DevicePixelRatioObserver, Video
     this.updateActiveState();
     this.updateVideoStreamOnVideoElement();
     this.updateVideoElementPhysicalPixels();
+    this.updateVideoStreamContent();
     this.tileController.sendTileStateUpdate(this.state());
   }
 
@@ -269,6 +274,24 @@ export default class DefaultVideoTile implements DevicePixelRatioObserver, Video
       this.tileState.boundVideoElement &&
       this.tileState.boundVideoStream
     );
+  }
+
+  private updateVideoStreamContent(): void {
+    if (
+      typeof this.videoStreamContentHeight === 'number' &&
+      typeof this.videoStreamContentWidth === 'number'
+    ) {
+      if (this.tileState.videoElementCSSWidthPixels === 0 && this.tileState.videoElementCSSHeightPixels === 0){
+        this.tileState.videoStreamContentWidth = 0;
+        this.tileState.videoStreamContentHeight = 0;
+      } else {
+        this.tileState.videoStreamContentHeight = this.videoStreamContentHeight;
+        this.tileState.videoStreamContentWidth = this.videoStreamContentWidth;
+      }
+    } else {
+      this.tileState.videoStreamContentHeight = null;
+      this.tileState.videoStreamContentWidth = null;
+    }
   }
 
   private updateVideoElementPhysicalPixels(): void {

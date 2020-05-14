@@ -30,6 +30,7 @@ export default class CreatePeerConnectionTask extends BaseTask implements Remova
   private removeVideoTrackEventListeners: { [trackId: string]: (() => void)[] } = {};
 
   static readonly REMOVE_HANDLER_INTERVAL_MS: number = 10000;
+  static readonly TIMEOUT_DELAY_MS: number = 300;
 
   constructor(
     private context: AudioVideoControllerState,
@@ -219,30 +220,15 @@ export default class CreatePeerConnectionTask extends BaseTask implements Remova
         });
       }
     }
-
-    let width: number;
-    let height: number;
-    if (track.getSettings) {
-      const cap: MediaTrackSettings = track.getSettings();
-      width = cap.width as number;
-      height = cap.height as number;
-    } else {
-      const cap: MediaTrackCapabilities = track.getCapabilities();
-      width = cap.width as number;
-      height = cap.height as number;
-    }
-    const externalUserId = this.context.realtimeController.realtimeExternalUserIdFromAttendeeId(
-      attendeeId
-    );
-    if (externalUserId) {
-      tile.bindVideoStream(attendeeId, false, stream, width, height, streamId, externalUserId);
-    } else {
-      this.bindExternalIdToRemoteTile(tile, attendeeId, stream, width, height, streamId);
-    }
-    this.logger.info(
-      `video track added, created tile=${tile.id()} track=${trackId} streamId=${streamId}`
-    );
-
+    new TimeoutScheduler(CreatePeerConnectionTask.TIMEOUT_DELAY_MS).start(() => {
+      var cap: MediaTrackSettings | MediaTrackCapabilities;
+      if (track.getSettings) {
+        cap = track.getSettings();
+      } else {
+        cap = track.getCapabilities();
+      }
+      this.bindTile(tile, cap, attendeeId, stream, streamId, trackId);
+    });
     let endEvent = 'removetrack';
     let target: MediaStream = stream;
     if (!this.context.browserBehavior.requiresUnifiedPlan()) {
@@ -260,6 +246,22 @@ export default class CreatePeerConnectionTask extends BaseTask implements Remova
       delete this.removeTrackRemovedEventListeners[track.id];
     };
     target.addEventListener(endEvent, trackRemovedHandler);
+  }
+
+  private bindTile(tile: VideoTile , cap: MediaTrackSettings | MediaTrackCapabilities, attendeeId: string, stream: MediaStream, streamId: number, trackId: string){
+    const externalUserId = this.context.realtimeController.realtimeExternalUserIdFromAttendeeId(
+      attendeeId
+    );
+    const width = cap.width as number;
+    const height = cap.height as number;
+    if (externalUserId) {
+      tile.bindVideoStream(attendeeId, false, stream, width, height, streamId, externalUserId);
+    } else {
+      this.bindExternalIdToRemoteTile(tile, attendeeId, stream, width, height, streamId);
+    }
+    this.logger.info(
+      `video track added, created tile=${tile.id()} track=${trackId} streamId=${streamId}`
+    );
   }
 
   private removeRemoteVideoTrack(track: MediaStreamTrack, tileState: VideoTileState): void {
