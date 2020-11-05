@@ -62,6 +62,7 @@ import DefaultTransceiverController from '../transceivercontroller/DefaultTransc
 import SimulcastTransceiverController from '../transceivercontroller/SimulcastTransceiverController';
 import DefaultVideoCaptureAndEncodeParameter from '../videocaptureandencodeparameter/DefaultVideoCaptureAndEncodeParameter';
 import AllHighestVideoBandwidthPolicy from '../videodownlinkbandwidthpolicy/AllHighestVideoBandwidthPolicy';
+import VideoAdaptivePolicy from '../videodownlinkbandwidthpolicy/VideoAdaptivePolicy';
 import VideoAdaptiveProbePolicy from '../videodownlinkbandwidthpolicy/VideoAdaptiveProbePolicy';
 import VideoSource from '../videosource/VideoSource';
 import DefaultVideoStreamIdSet from '../videostreamidset/DefaultVideoStreamIdSet';
@@ -264,10 +265,18 @@ export default class DefaultAudioVideoController
       );
       simulcastPolicy.addObserver(this);
       this.meetingSessionContext.videoUplinkBandwidthPolicy = simulcastPolicy;
-      this.meetingSessionContext.videoDownlinkBandwidthPolicy = new VideoAdaptiveProbePolicy(
-        this.logger,
-        this.meetingSessionContext.videoTileController
-      );
+      let videoAdaptiveProbePolicy;
+      if (
+        !(this.meetingSessionContext.videoDownlinkBandwidthPolicy instanceof VideoAdaptivePolicy)
+      ) {
+        videoAdaptiveProbePolicy = new VideoAdaptiveProbePolicy(this.logger);
+        this.meetingSessionContext.videoDownlinkBandwidthPolicy = videoAdaptiveProbePolicy;
+      } else {
+        videoAdaptiveProbePolicy = this.meetingSessionContext
+          .videoDownlinkBandwidthPolicy as VideoAdaptivePolicy;
+      }
+      videoAdaptiveProbePolicy.setTileController(this.meetingSessionContext.videoTileController);
+
       this.meetingSessionContext.videoStreamIndex = new SimulcastVideoStreamIndex(this.logger);
     } else {
       this.meetingSessionContext.enableSimulcast = false;

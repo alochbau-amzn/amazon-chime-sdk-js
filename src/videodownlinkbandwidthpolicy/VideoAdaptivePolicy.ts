@@ -1,4 +1,4 @@
-// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 import Direction from '../clientmetricreport/ClientMetricReportDirection';
@@ -11,6 +11,7 @@ import VideoStreamDescription from '../videostreamindex/VideoStreamDescription';
 import VideoStreamIndex from '../videostreamindex/VideoStreamIndex';
 import VideoTileController from '../videotilecontroller/VideoTileController';
 import VideoDownlinkBandwidthPolicy from './VideoDownlinkBandwidthPolicy';
+import VideoPreference from './VideoPreference';
 
 class LinkMediaStats {
   constructor() {
@@ -27,6 +28,12 @@ class LinkMediaStats {
   rttMs: number;
 }
 
+type policyRates = {
+  targetDownlinkBitrate: number;
+  chosenTotalBitrate: number;
+  deltaToNextUpgrade: number;
+};
+
 const enum RateProbeState {
   kNotProbing = 'Not Probing',
   kProbePending = 'Probe Pending',
@@ -38,7 +45,7 @@ const enum UseReceiveSet {
   kPreviousOptimal,
   kPreProbe,
 }
-export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthPolicy {
+export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy {
   private static readonly DEFAULT_BANDWIDTH_KBPS = 2800;
   private static readonly STARTUP_PERIOD_MS = 6000;
   private static readonly LARGE_RATE_CHANGE_TRIGGER_PERCENT = 20;
@@ -50,6 +57,8 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
   private static readonly MAX_ALLOWED_PROBE_TIME_MS = 60000;
 
   protected tileController: VideoTileController;
+  protected videoPreferences: VideoPreference[];
+  protected videoPreferencesUpdated: boolean;
   private logCount: number;
   private optimalReceiveSet: VideoStreamIdSet;
   private subscribedReceiveSet: VideoStreamIdSet;
@@ -77,15 +86,17 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
   reset(): void {
     this.optimalReceiveSet = new DefaultVideoStreamIdSet();
     this.subscribedReceiveSet = new DefaultVideoStreamIdSet();
+    this.videoPreferences = undefined;
+    this.videoPreferencesUpdated = false;
     this.logCount = 0;
     this.startupPeriod = true;
     this.usingPrevTargetRate = false;
     this.rateProbeState = RateProbeState.kNotProbing;
     this.timeFirstEstimate = 0;
     this.lastUpgradeRateKbps = 0;
-    this.timeBeforeAllowSubscribeMs = VideoAdaptiveProbePolicy.MIN_TIME_BETWEEN_SUBSCRIBE;
+    this.timeBeforeAllowSubscribeMs = VideoAdaptivePolicy.MIN_TIME_BETWEEN_SUBSCRIBE;
     this.timeLastProbe = Date.now();
-    this.timeBeforeAllowProbeMs = VideoAdaptiveProbePolicy.MIN_TIME_BETWEEN_PROBE;
+    this.timeBeforeAllowProbeMs = VideoAdaptivePolicy.MIN_TIME_BETWEEN_PROBE;
     this.downlinkStats = new LinkMediaStats();
     this.prevDownlinkStats = new LinkMediaStats();
   }
@@ -180,7 +191,7 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
     }
 
     // reset time before allow subscribe to default
-    this.timeBeforeAllowSubscribeMs = VideoAdaptiveProbePolicy.MIN_TIME_BETWEEN_SUBSCRIBE;
+    this.timeBeforeAllowSubscribeMs = VideoAdaptivePolicy.MIN_TIME_BETWEEN_SUBSCRIBE;
 
     const chosenStreams: VideoStreamDescription[] = [];
 
@@ -204,11 +215,15 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
       }
     }
 
-    const targetDownlinkBitrate = this.determineTargetRate(remoteInfos);
-    let deltaToNextUpgrade = 0;
-    let chosenTotalBitrate = 0;
+    const rates: policyRates = {targetDownlinkBitrate: 0, chosenTotalBitrate:0, deltaToNextUpgrade:0};
+    rates.targetDownlinkBitrate = this.determineTargetRate(remoteInfos);
     let upgradeStream: VideoStreamDescription;
-
+    if (this.videoPreferences === undefined) {
+      upgradeStream = this.defaultPolicy(rates, remoteInfos, chosenStreams);
+    } else {
+      upgradeStream = this.priorityPolicy(rates, remoteInfos, chosenStreams);
+    }
+    /*
     // If screen share is available, then subscribe to that first before anything else
     chosenTotalBitrate += this.chooseContent(chosenStreams, remoteInfos);
 
@@ -258,24 +273,23 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
         }
       });
     }
+    */
 
     let subscriptionChoice = UseReceiveSet.kNewOptimal;
     // Look for probing or override opportunities
-    if (!this.startupPeriod && sameStreamChoices && deltaToNextUpgrade !== 0) {
+    if (!this.startupPeriod && sameStreamChoices && rates.deltaToNextUpgrade !== 0) {
       if (this.rateProbeState === RateProbeState.kProbing) {
         subscriptionChoice = this.handleProbe(
           chosenStreams,
           pausedStreamIds,
-          targetDownlinkBitrate,
+          rates.targetDownlinkBitrate,
           remoteInfos
         );
       } else {
         subscriptionChoice = this.maybeOverrideOrProbe(
           chosenStreams,
           pausedStreamIds,
-          targetDownlinkBitrate,
-          chosenTotalBitrate,
-          deltaToNextUpgrade,
+          rates,
           upgradeStream
         );
       }
@@ -285,7 +299,7 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
       this.lastUpgradeRateKbps = 0;
     }
 
-    let decisionLogStr = this.policyStateLogStr(remoteInfos, targetDownlinkBitrate);
+    let decisionLogStr = this.policyStateLogStr(remoteInfos, rates.targetDownlinkBitrate);
     if (this.logCount % 15 === 0 || this.rateProbeState !== lastProbeState) {
       this.logger.info(decisionLogStr);
       this.logCount = 0;
@@ -293,7 +307,7 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
     }
     this.logCount++;
 
-    this.prevTargetRateKbps = targetDownlinkBitrate;
+    this.prevTargetRateKbps = rates.targetDownlinkBitrate;
     this.prevRemoteInfos = remoteInfos;
 
     if (subscriptionChoice === UseReceiveSet.kPreviousOptimal) {
@@ -353,10 +367,9 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
         // - get packet loss and have a valid estimate
         // - startup period has expired and rate is not still increasing
         if (
-          this.downlinkStats.bandwidthEstimateKbps >
-            VideoAdaptiveProbePolicy.DEFAULT_BANDWIDTH_KBPS ||
+          this.downlinkStats.bandwidthEstimateKbps > VideoAdaptivePolicy.DEFAULT_BANDWIDTH_KBPS ||
           this.downlinkStats.packetsLost > 0 ||
-          (now - this.timeFirstEstimate > VideoAdaptiveProbePolicy.STARTUP_PERIOD_MS &&
+          (now - this.timeFirstEstimate > VideoAdaptivePolicy.STARTUP_PERIOD_MS &&
             this.downlinkStats.bandwidthEstimateKbps <=
               this.prevDownlinkStats.bandwidthEstimateKbps)
         ) {
@@ -367,13 +380,13 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
       // If we are in the startup period and we haven't detected any packet loss, then
       // keep it at the default to let the estimation get to a steady state
       if (this.startupPeriod) {
-        targetBitrate = VideoAdaptiveProbePolicy.DEFAULT_BANDWIDTH_KBPS;
+        targetBitrate = VideoAdaptivePolicy.DEFAULT_BANDWIDTH_KBPS;
       } else {
         targetBitrate = this.downlinkStats.bandwidthEstimateKbps;
       }
     } else {
       if (this.timeFirstEstimate === 0) {
-        targetBitrate = VideoAdaptiveProbePolicy.DEFAULT_BANDWIDTH_KBPS;
+        targetBitrate = VideoAdaptivePolicy.DEFAULT_BANDWIDTH_KBPS;
       } else {
         targetBitrate = this.prevTargetRateKbps;
       }
@@ -390,11 +403,11 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
         this.downlinkStats.bandwidthEstimateKbps < this.prevTargetRateKbps) ||
         this.downlinkStats.bandwidthEstimateKbps <
           (this.prevTargetRateKbps *
-            (100 - VideoAdaptiveProbePolicy.LARGE_RATE_CHANGE_TRIGGER_PERCENT)) /
+            (100 - VideoAdaptivePolicy.LARGE_RATE_CHANGE_TRIGGER_PERCENT)) /
             100 ||
         this.downlinkStats.bandwidthEstimateKbps <
           (this.downlinkStats.usedBandwidthKbps *
-            VideoAdaptiveProbePolicy.LARGE_RATE_CHANGE_TRIGGER_PERCENT) /
+            VideoAdaptivePolicy.LARGE_RATE_CHANGE_TRIGGER_PERCENT) /
             100) &&
       this.downlinkStats.packetsLost === 0
     ) {
@@ -423,7 +436,7 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
       case RateProbeState.kProbePending:
         if (
           this.timeLastProbe === 0 ||
-          now - this.timeLastProbe > VideoAdaptiveProbePolicy.MIN_TIME_BETWEEN_PROBE
+          now - this.timeLastProbe > VideoAdaptivePolicy.MIN_TIME_BETWEEN_PROBE
         ) {
           this.timeProbePendingStart = now;
         } else {
@@ -439,7 +452,7 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
           // Increase the time allowed until the next probe
           this.timeBeforeAllowProbeMs = Math.min(
             this.timeBeforeAllowProbeMs * 2,
-            VideoAdaptiveProbePolicy.MAX_HOLD_MS_BEFORE_PROBE
+            VideoAdaptivePolicy.MAX_HOLD_MS_BEFORE_PROBE
           );
         } else {
           // Too soon to do probe
@@ -462,6 +475,11 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
     chosenStreams: VideoStreamDescription[],
     upgradeStream: VideoStreamDescription
   ): number {
+    if (!upgradeStream) {
+      this.logger.warn (`upgradeToStream called with invalid stream`);
+      return 0;
+    }
+
     for (let i = 0; i < chosenStreams.length; i++) {
       if (chosenStreams[i].groupId === upgradeStream.groupId) {
         const diffRate = upgradeStream.avgBitrateKbps - chosenStreams[i].avgBitrateKbps;
@@ -495,16 +513,16 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
     if (this.rateProbeState !== RateProbeState.kProbing) {
       return UseReceiveSet.kNewOptimal;
     }
-    // Don't allow probe to happen indefinitely
-    if (Date.now() - this.timeLastProbe > VideoAdaptiveProbePolicy.MAX_ALLOWED_PROBE_TIME_MS) {
-      this.logger.info(`bwe: Canceling probe due to timeout`);
-      this.setProbeState(RateProbeState.kNotProbing);
-      return UseReceiveSet.kNewOptimal;
-    }
+      // Don't allow probe to happen indefinitely
+      if (Date.now() - this.timeLastProbe > VideoAdaptivePolicy.MAX_ALLOWED_PROBE_TIME_MS) {
+        this.logger.info(`bwe: Canceling probe due to timeout`);
+        this.setProbeState(RateProbeState.kNotProbing);
+        return UseReceiveSet.kNewOptimal;
+      }
 
     if (this.downlinkStats.packetsLost > 0) {
       this.setProbeState(RateProbeState.kNotProbing);
-      this.timeBeforeAllowSubscribeMs = VideoAdaptiveProbePolicy.MIN_TIME_BETWEEN_SUBSCRIBE * 3;
+      this.timeBeforeAllowSubscribeMs = VideoAdaptivePolicy.MIN_TIME_BETWEEN_SUBSCRIBE * 3;
       return UseReceiveSet.kPreProbe;
     }
     const subscribedRate = this.calculateSubscribeRate(remoteInfos, this.optimalReceiveSet);
@@ -520,7 +538,7 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
         // If target bitrate can sustain probe rate, then probe was successful.
         this.setProbeState(RateProbeState.kNotProbing);
         // Reset the time allowed between probes since this was successful
-        this.timeBeforeAllowProbeMs = VideoAdaptiveProbePolicy.MIN_TIME_BETWEEN_PROBE;
+        this.timeBeforeAllowProbeMs = VideoAdaptivePolicy.MIN_TIME_BETWEEN_PROBE;
         return UseReceiveSet.kNewOptimal;
       }
     }
@@ -531,9 +549,7 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
   private maybeOverrideOrProbe(
     chosenStreams: VideoStreamDescription[],
     pausedStreamIds: VideoStreamIdSet,
-    chosenTotalBitrate: number,
-    targetDownlinkBitrate: number,
-    deltaToNextUpgrade: number,
+    rates: policyRates,
     upgradeStream: VideoStreamDescription
   ): UseReceiveSet {
     const sameSubscriptions = this.chosenStreamsSameAsLast(chosenStreams, pausedStreamIds);
@@ -544,13 +560,13 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
     // participants due to avg bitrate fluctuations. If there hasn't been much of a change in estimated bandwidth
     // and the number of streams and their max rates are the same, then reuse the previous subscription
     const triggerPercent =
-      targetDownlinkBitrate > VideoAdaptiveProbePolicy.LOW_BITRATE_THRESHOLD_KBPS
-        ? VideoAdaptiveProbePolicy.TARGET_RATE_CHANGE_TRIGGER_PERCENT
-        : VideoAdaptiveProbePolicy.TARGET_RATE_CHANGE_TRIGGER_PERCENT * 2;
-    const minTargetBitrateDelta = (targetDownlinkBitrate * triggerPercent) / 100;
+      rates.targetDownlinkBitrate > VideoAdaptivePolicy.LOW_BITRATE_THRESHOLD_KBPS
+        ? VideoAdaptivePolicy.TARGET_RATE_CHANGE_TRIGGER_PERCENT
+        : VideoAdaptivePolicy.TARGET_RATE_CHANGE_TRIGGER_PERCENT * 2;
+    const minTargetBitrateDelta = (rates.targetDownlinkBitrate * triggerPercent) / 100;
     if (
       !sameSubscriptions &&
-      Math.abs(targetDownlinkBitrate - this.prevTargetRateKbps) < minTargetBitrateDelta
+      Math.abs(rates.targetDownlinkBitrate - this.prevTargetRateKbps) < minTargetBitrateDelta
     ) {
       this.logger.info(
         'bwe: MaybeOverrideOrProbe: Reuse last decision based on delta rate. {' +
@@ -595,7 +611,10 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
       // the threshold of doing an upgrade, then do it and if we are lucky will be the
       // same set of streams as last and no new subscription will be done.
       this.setProbeState(RateProbeState.kNotProbing);
-      if (targetDownlinkBitrate + minTargetBitrateDelta > chosenTotalBitrate + deltaToNextUpgrade) {
+      if (
+        rates.targetDownlinkBitrate + minTargetBitrateDelta >
+        rates.chosenTotalBitrate + rates.deltaToNextUpgrade
+      ) {
         this.logger.info('bwe: MaybeOverrideOrProbe: Upgrade since we are within threshold');
         this.upgradeToStream(chosenStreams, upgradeStream);
       }
@@ -655,19 +674,138 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
     }
   }
 
-  private chooseContent(
+  private defaultPolicy(
+    rates: policyRates,
+    remoteInfos: VideoStreamDescription[],
     chosenStreams: VideoStreamDescription[],
-    remoteInfos: VideoStreamDescription[]
-  ): number {
-    let contentRate = 0;
+  ): VideoStreamDescription {
+    let upgradeStream: VideoStreamDescription;
+    // Try to have at least one stream from every group first
+    // Since the streams are sorted this will pick the lowest bitrates first
     for (const info of remoteInfos) {
-      // For now always subscribe to content even if higher bandwidth then target
-      if (info.attendeeId.endsWith(ContentShareConstants.Modality)) {
-        chosenStreams.push(info);
-        contentRate += info.avgBitrateKbps;
+      if (info.avgBitrateKbps === 0) {
+        continue;
+      }
+
+      if (chosenStreams.findIndex(stream => stream.groupId === info.groupId) === -1) {
+        if (rates.chosenTotalBitrate + info.avgBitrateKbps <= rates.targetDownlinkBitrate) {
+          chosenStreams.push(info);
+          rates.chosenTotalBitrate += info.avgBitrateKbps;
+        } else if (rates.deltaToNextUpgrade === 0) {
+          // Keep track of step to next upgrade
+          rates.deltaToNextUpgrade = info.avgBitrateKbps;
+          upgradeStream = info;
+        }
       }
     }
-    return contentRate;
+
+    // Look for upgrades until we run out of bandwidth
+    let lookForUpgrades = true;
+    while (lookForUpgrades) {
+      // We will set this to true if we find any new upgrades during the loop over the
+      // chosen streams (i.e. when we do a full loop without an upgrade we will give up)
+      lookForUpgrades = false;
+      chosenStreams.forEach((chosenStream, index) => {
+        for (const info of remoteInfos) {
+          if (
+            info.groupId === chosenStream.groupId &&
+            info.streamId !== chosenStream.streamId &&
+            info.avgBitrateKbps > chosenStream.avgBitrateKbps
+          ) {
+            const increaseKbps = info.avgBitrateKbps - chosenStream.avgBitrateKbps;
+            if (rates.chosenTotalBitrate + increaseKbps <= rates.targetDownlinkBitrate) {
+              rates.chosenTotalBitrate += increaseKbps;
+              chosenStreams[index] = info;
+              lookForUpgrades = true;
+            } else if (rates.deltaToNextUpgrade === 0) {
+              // Keep track of step to next upgrade
+              rates.deltaToNextUpgrade = increaseKbps;
+              upgradeStream = info;
+            }
+          }
+        }
+      });
+    }
+    return upgradeStream;
+  }
+
+  private priorityPolicy(
+    rates: policyRates,
+    remoteInfos: VideoStreamDescription[],
+    chosenStreams: VideoStreamDescription[],
+  ): VideoStreamDescription {
+    let upgradeStream: VideoStreamDescription;
+    // Todo - handle video preferences empty
+    // sort preferences by priority ascending
+    this.videoPreferences.sort((a, b) => {
+      return a.priority - b.priority;
+    });
+
+    let highestPriority = this.videoPreferences[0].priority;
+    let nextPriority;
+    let priority = highestPriority;
+    while(priority != -1) {
+      nextPriority = -1;
+      for (const preference of this.videoPreferences) {
+        if (preference.priority === priority) {
+          // First subscribe to at least low rate
+          for (const info of remoteInfos) {
+            if (info.attendeeId === preference.attendeeId) {
+              if (chosenStreams.findIndex(stream => stream.groupId === info.groupId) === -1) {
+                if (rates.chosenTotalBitrate + info.avgBitrateKbps <= rates.targetDownlinkBitrate) {
+                  chosenStreams.push(info);
+                  rates.chosenTotalBitrate += info.avgBitrateKbps;
+                } else if (rates.deltaToNextUpgrade === 0) {
+                  // Keep track of step to next upgrade
+                  rates.deltaToNextUpgrade = info.avgBitrateKbps;
+                  upgradeStream = info;
+                }
+              }
+            }
+          }
+        } else {
+          if (preference.priority > priority) {
+            nextPriority = preference.priority;
+            break;
+          }
+        }
+      }
+
+      // Now try to upgrade all attendee's with this priority
+      for (const preference of this.videoPreferences) {
+        if (preference.priority === priority) {
+          for (const info of remoteInfos) {
+            if (info.attendeeId === preference.attendeeId) {
+              const index = chosenStreams.findIndex(stream => stream.groupId === info.groupId && stream.maxBitrateKbps < info.maxBitrateKbps);
+              if (index !== -1) {
+                  const increaseKbps = info.avgBitrateKbps - chosenStreams[index].avgBitrateKbps;
+                  if (rates.chosenTotalBitrate + increaseKbps <= rates.targetDownlinkBitrate) {
+                    rates.chosenTotalBitrate += increaseKbps;
+                    chosenStreams[index] = info;
+                  } else if (rates.deltaToNextUpgrade === 0) {
+                    // Keep track of step to next upgrade
+                    rates.deltaToNextUpgrade = increaseKbps;
+                    upgradeStream = info;
+                  }
+                }
+              }
+            }
+          } else {
+          if (preference.priority > priority) {
+            break;
+          }
+        }
+      }
+
+      // If we haven't subscribed to the highest rate of the top priority videos then
+      // do not subscribe to any other sources
+      if (priority === highestPriority && rates.deltaToNextUpgrade !== 0) {
+        console.log(`bwe: priorityPolicy not enough bandwidth for highest.  Need ${rates.deltaToNextUpgrade}`);
+        break;
+      }
+      priority = nextPriority;
+    }
+    return upgradeStream;
   }
 
   private availStreamsSameAsLast(remoteInfos: VideoStreamDescription[]): boolean {
@@ -726,12 +864,15 @@ export default class VideoAdaptiveProbePolicy implements VideoDownlinkBandwidthP
     }
     remoteInfoStr += `]`;
 
-    const logString =
+    let logString =
       `bwe: optimalReceiveSet ${JSON.stringify(optimalReceiveSet)}\n` +
       `bwe:   prev ${JSON.stringify(this.prevDownlinkStats)}\n` +
       `bwe:   now  ${JSON.stringify(this.downlinkStats)}\n` +
-      `bwe:   ${remoteInfoStr}`;
+      `bwe:   ${remoteInfoStr}\n`;
 
+      if (!!this.videoPreferences) {
+        logString += `bwe:    preferences: ${JSON.stringify(this.videoPreferences)}`;
+      }
     return logString;
   }
 }
