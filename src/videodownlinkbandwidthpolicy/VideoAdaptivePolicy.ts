@@ -1,11 +1,13 @@
 // Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import AsyncScheduler from '../scheduler/AsyncScheduler';
 import Direction from '../clientmetricreport/ClientMetricReportDirection';
 import ClientMetricReport from '../clientmetricreport/DefaultClientMetricReport';
 import ContentShareConstants from '../contentsharecontroller/ContentShareConstants';
 import Logger from '../logger/Logger';
 import DefaultVideoStreamIdSet from '../videostreamidset/DefaultVideoStreamIdSet';
+import VideoDownlinkObserver from './VideoDownlinkObserver';
 import VideoStreamIdSet from '../videostreamidset/VideoStreamIdSet';
 import VideoStreamDescription from '../videostreamindex/VideoStreamDescription';
 import VideoStreamIndex from '../videostreamindex/VideoStreamIndex';
@@ -59,6 +61,7 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
   protected tileController: VideoTileController;
   protected videoPreferences: VideoPreference[];
   protected videoPreferencesUpdated: boolean;
+  protected observerQueue: Set<VideoDownlinkObserver> = new Set<VideoDownlinkObserver>();
   private logCount: number;
   private optimalReceiveSet: VideoStreamIdSet;
   private subscribedReceiveSet: VideoStreamIdSet;
@@ -169,6 +172,24 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
     return this.subscribedReceiveSet.clone();
   }
 
+  addObserver(observer: VideoDownlinkObserver): void {
+    this.observerQueue.add(observer);
+  }
+
+  removeObserver(observer: VideoDownlinkObserver): void {
+    this.observerQueue.delete(observer);
+  }
+
+  forEachObserver(observerFunc: (observer: VideoDownlinkObserver) => void): void {
+    for (const observer of this.observerQueue) {
+      new AsyncScheduler().start(() => {
+        if (this.observerQueue.has(observer)) {
+          observerFunc(observer);
+        }
+      });
+    }
+  }
+
   private calculateOptimalReceiveSet(): VideoStreamIdSet {
     const streamSelectionSet = new DefaultVideoStreamIdSet();
     const lastProbeState = this.rateProbeState;
@@ -223,57 +244,6 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
     } else {
       upgradeStream = this.priorityPolicy(rates, remoteInfos, chosenStreams);
     }
-    /*
-    // If screen share is available, then subscribe to that first before anything else
-    chosenTotalBitrate += this.chooseContent(chosenStreams, remoteInfos);
-
-    // Try to have at least one stream from every group first
-    // Since the streams are sorted this will pick the lowest bitrates first
-    for (const info of remoteInfos) {
-      if (info.avgBitrateKbps === 0) {
-        continue;
-      }
-
-      if (chosenStreams.findIndex(stream => stream.groupId === info.groupId) === -1) {
-        if (chosenTotalBitrate + info.avgBitrateKbps <= targetDownlinkBitrate) {
-          chosenStreams.push(info);
-          chosenTotalBitrate += info.avgBitrateKbps;
-        } else if (deltaToNextUpgrade === 0) {
-          // Keep track of step to next upgrade
-          deltaToNextUpgrade = info.avgBitrateKbps;
-          upgradeStream = info;
-        }
-      }
-    }
-
-    // Look for upgrades until we run out of bandwidth
-    let lookForUpgrades = true;
-    while (lookForUpgrades) {
-      // We will set this to true if we find any new upgrades during the loop over the
-      // chosen streams (i.e. when we do a full loop without an upgrade we will give up)
-      lookForUpgrades = false;
-      chosenStreams.forEach((chosenStream, index) => {
-        for (const info of remoteInfos) {
-          if (
-            info.groupId === chosenStream.groupId &&
-            info.streamId !== chosenStream.streamId &&
-            info.avgBitrateKbps > chosenStream.avgBitrateKbps
-          ) {
-            const increaseKbps = info.avgBitrateKbps - chosenStream.avgBitrateKbps;
-            if (chosenTotalBitrate + increaseKbps <= targetDownlinkBitrate) {
-              chosenTotalBitrate += increaseKbps;
-              chosenStreams[index] = info;
-              lookForUpgrades = true;
-            } else if (deltaToNextUpgrade === 0) {
-              // Keep track of step to next upgrade
-              deltaToNextUpgrade = increaseKbps;
-              upgradeStream = info;
-            }
-          }
-        }
-      });
-    }
-    */
 
     let subscriptionChoice = UseReceiveSet.kNewOptimal;
     // Look for probing or override opportunities
@@ -309,6 +279,7 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
 
     this.prevTargetRateKbps = rates.targetDownlinkBitrate;
     this.prevRemoteInfos = remoteInfos;
+    this.videoPreferencesUpdated = false;
 
     if (subscriptionChoice === UseReceiveSet.kPreviousOptimal) {
       this.logger.info('bwe: keepSameSubscriptions');
@@ -339,7 +310,7 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
     return streamSelectionSet;
   }
 
-  determineTargetRate(remoteInfos: VideoStreamDescription[]): number {
+  private determineTargetRate(remoteInfos: VideoStreamDescription[]): number {
     let targetBitrate = 0;
     // Estimated downlink bandwidth from WebRTC is dependent on actually receiving data, so if it ever got driven below the bitrate of the lowest
     // stream (a simulcast stream), and it stops receiving, it will get stuck never being able to resubscribe (as is implemented).
@@ -424,7 +395,7 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
     return targetBitrate;
   }
 
-  setProbeState(newState: RateProbeState): boolean {
+  private setProbeState(newState: RateProbeState): boolean {
     if (this.rateProbeState === newState) return;
 
     const now = Date.now();
@@ -800,7 +771,6 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
       // If we haven't subscribed to the highest rate of the top priority videos then
       // do not subscribe to any other sources
       if (priority === highestPriority && rates.deltaToNextUpgrade !== 0) {
-        console.log(`bwe: priorityPolicy not enough bandwidth for highest.  Need ${rates.deltaToNextUpgrade}`);
         break;
       }
       priority = nextPriority;
@@ -809,7 +779,7 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
   }
 
   private availStreamsSameAsLast(remoteInfos: VideoStreamDescription[]): boolean {
-    if (this.prevRemoteInfos === undefined || remoteInfos.length !== this.prevRemoteInfos.length) {
+    if (this.prevRemoteInfos === undefined || remoteInfos.length !== this.prevRemoteInfos.length || this.videoPreferencesUpdated === true) {
       return false;
     }
 

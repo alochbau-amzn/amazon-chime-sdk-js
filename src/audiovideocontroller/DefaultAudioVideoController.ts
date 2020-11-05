@@ -60,6 +60,7 @@ import TimeoutTask from '../task/TimeoutTask';
 import WaitForAttendeePresenceTask from '../task/WaitForAttendeePresenceTask';
 import DefaultTransceiverController from '../transceivercontroller/DefaultTransceiverController';
 import SimulcastTransceiverController from '../transceivercontroller/SimulcastTransceiverController';
+import VideoDownlinkObserver from '../videodownlinkbandwidthpolicy/VideoDownlinkObserver';
 import DefaultVideoCaptureAndEncodeParameter from '../videocaptureandencodeparameter/DefaultVideoCaptureAndEncodeParameter';
 import AllHighestVideoBandwidthPolicy from '../videodownlinkbandwidthpolicy/AllHighestVideoBandwidthPolicy';
 import VideoAdaptivePolicy from '../videodownlinkbandwidthpolicy/VideoAdaptivePolicy';
@@ -79,7 +80,7 @@ import WebSocketAdapter from '../websocketadapter/WebSocketAdapter';
 import AudioVideoControllerState from './AudioVideoControllerState';
 
 export default class DefaultAudioVideoController
-  implements AudioVideoController, SimulcastUplinkObserver {
+  implements AudioVideoController, SimulcastUplinkObserver, VideoDownlinkObserver {
   private _logger: Logger;
   private _configuration: MeetingSessionConfiguration;
   private _webSocketAdapter: WebSocketAdapter;
@@ -293,6 +294,7 @@ export default class DefaultAudioVideoController
       }
       this.meetingSessionContext.audioProfile = this._audioProfile;
     }
+    this.meetingSessionContext.videoDownlinkBandwidthPolicy.addObserver(this);
 
     this.meetingSessionContext.lastKnownVideoAvailability = new MeetingSessionVideoAvailability();
     this.meetingSessionContext.videoCaptureAndEncodeParameter = new DefaultVideoCaptureAndEncodeParameter(
@@ -466,6 +468,10 @@ export default class DefaultAudioVideoController
         this.notifyStop(status, error);
       }
     });
+  }
+
+  wantsResubscribe(): void {
+    this.update();
   }
 
   update(): boolean {

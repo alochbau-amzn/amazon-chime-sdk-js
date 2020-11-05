@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import ClientMetricReport from '../clientmetricreport/ClientMetricReport';
+import VideoDownlinkObserver from './VideoDownlinkObserver';
 import VideoStreamIdSet from '../videostreamidset/VideoStreamIdSet';
 import VideoStreamIndex from '../videostreamindex/VideoStreamIndex';
 
@@ -37,4 +38,14 @@ export default interface VideoDownlinkBandwidthPolicy {
    * subscribed to, and return the set.
    */
   chooseSubscriptions(): VideoStreamIdSet;
+
+  /**
+   * Add VideoDownlinkObserver to obeserve resubscribe requests
+   */
+  addObserver(observer: VideoDownlinkObserver): void;
+
+  /**
+   * Removes the VideoDownlinkObserver
+   */
+  removeObserver(observer: VideoDownlinkObserver): void;
 }

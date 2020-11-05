@@ -4,6 +4,7 @@
 import ClientMetricReport from '../clientmetricreport/ClientMetricReport';
 import DefaultVideoStreamIdSet from '../videostreamidset/DefaultVideoStreamIdSet';
 import DefaultVideoStreamIndex from '../videostreamindex/DefaultVideoStreamIndex';
+import VideoDownlinkObserver from './VideoDownlinkObserver';
 import VideoDownlinkBandwidthPolicy from './VideoDownlinkBandwidthPolicy';
 
 export default class NoVideoDownlinkBandwidthPolicy implements VideoDownlinkBandwidthPolicy {
@@ -16,4 +17,6 @@ export default class NoVideoDownlinkBandwidthPolicy implements VideoDownlinkBand
   chooseSubscriptions(): DefaultVideoStreamIdSet {
     return new DefaultVideoStreamIdSet();
   }
+  addObserver(observer: VideoDownlinkObserver): void {}
+  removeObserver(observer: VideoDownlinkObserver): void {}
 }
