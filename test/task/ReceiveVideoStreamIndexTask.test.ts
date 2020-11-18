@@ -559,10 +559,7 @@ describe('ReceiveVideoStreamIndexTask', () => {
           selfAttendeeId,
           logger
         );
-        context.videoDownlinkBandwidthPolicy = new VideoAdaptiveProbePolicy(
-          logger,
-          context.videoTileController
-        );
+        context.videoDownlinkBandwidthPolicy = new VideoAdaptiveProbePolicy(logger);
         let calledTimes = 0;
         class TestObserver implements AudioVideoObserver {
           remoteVideoSourcesDidChange(videoSources: VideoSource[]): void {
@@ -602,10 +599,7 @@ describe('ReceiveVideoStreamIndexTask', () => {
           selfAttendeeId,
           logger
         );
-        context.videoDownlinkBandwidthPolicy = new VideoAdaptiveProbePolicy(
-          logger,
-          context.videoTileController
-        );
+        context.videoDownlinkBandwidthPolicy = new VideoAdaptiveProbePolicy(logger);
         let calledTimes = 0;
         class TestObserver implements AudioVideoObserver {
           remoteVideoSourcesDidChange(_videoSources: VideoSource[]): void {

@@ -7,7 +7,8 @@ import ClientMetricReportDirection from '../../src/clientmetricreport/ClientMetr
 import DefaultClientMetricReport from '../../src/clientmetricreport/DefaultClientMetricReport';
 import GlobalMetricReport from '../../src/clientmetricreport/GlobalMetricReport';
 import StreamMetricReport from '../../src/clientmetricreport/StreamMetricReport';
-import NoOpDebugLogger from '../../src/logger/NoOpDebugLogger';
+import ConsoleLogger from '../../src/logger/ConsoleLogger';
+import LogLevel from '../../src/logger/LogLevel';
 import {
   SdkIndexFrame,
   SdkStreamDescriptor,
@@ -20,7 +21,7 @@ import SimulcastVideoStreamIndex from '../../src/videostreamindex/SimulcastVideo
 describe('VideoPriorityBasedPolicy', () => {
   const expect: Chai.ExpectStatic = chai.expect;
   const assert: Chai.AssertStatic = chai.assert;
-  const logger = new NoOpDebugLogger();
+  const logger = new ConsoleLogger('sdk', LogLevel.INFO);
   let policy: VideoPriorityBasedPolicy;
   let videoStreamIndex: SimulcastVideoStreamIndex;
   interface DateNow {
@@ -118,36 +119,18 @@ describe('VideoPriorityBasedPolicy', () => {
 
   describe('reset', () => {
     it('can be reset', () => {
-    updateIndexFrame(videoStreamIndex, 6, 0, 600);
-    policy.updateIndex(videoStreamIndex);
-    let resub = policy.wantsResubscribe();
-    expect(resub).to.equal(true);
-    let received = policy.chooseSubscriptions();
-    expect(received.array()).to.deep.equal([2, 4, 6, 8]);
+      updateIndexFrame(videoStreamIndex, 6, 0, 600);
+      policy.updateIndex(videoStreamIndex);
+      const preferences: VideoPreference[] =[];
+      preferences.push(new VideoPreference('attendee-1', 1));
+      policy.setRemoteSourcePriority(preferences);
+      let resub = policy.wantsResubscribe();
+      expect(resub).to.equal(true);
+      let received = policy.chooseSubscriptions();
+      expect(received.array()).to.deep.equal([2]);
       policy.reset();
       received = policy.chooseSubscriptions();
       expect(received.array()).to.deep.equal([]);
-    });
-  });
-
-  describe('no priority', () => {
-    it('basic no priority with startup', () => {
-        updateIndexFrame(videoStreamIndex, 5, 0, 600);
-        policy.updateIndex(videoStreamIndex);
-        let resub = policy.wantsResubscribe();
-        expect(resub).to.equal(true);
-        let received = policy.chooseSubscriptions();
-        expect(received.array()).to.deep.equal([2, 4, 6, 8]);
-
-        incrementTime(6100);
-        const metricReport = new DefaultClientMetricReport(logger);
-        metricReport.globalMetricReport = new GlobalMetricReport();
-        metricReport.globalMetricReport.currentMetrics['googAvailableReceiveBandwidth'] = 3600 * 1000;
-        policy.updateMetrics(metricReport);
-        resub = policy.wantsResubscribe();
-        expect(resub).to.equal(true);
-        received = policy.chooseSubscriptions();
-        expect(received.array()).to.deep.equal([2, 4, 6, 8, 10]);
     });
   });
 
@@ -160,9 +143,9 @@ describe('VideoPriorityBasedPolicy', () => {
         metricReport.globalMetricReport.currentMetrics['googAvailableReceiveBandwidth'] = 2400 * 1000;
         policy.updateMetrics(metricReport);
         let resub = policy.wantsResubscribe();
-        expect(resub).to.equal(true);
+        expect(resub).to.equal(false);
         let received = policy.chooseSubscriptions();
-        expect(received.array()).to.deep.equal([2, 4, 6, 8]);
+        expect(received.array()).to.deep.equal([]);
 
         incrementTime(6100);
         metricReport.globalMetricReport.currentMetrics['googAvailableReceiveBandwidth'] = 2400 * 1000;
@@ -197,11 +180,12 @@ describe('VideoPriorityBasedPolicy', () => {
         incrementTime(6100);
         metricReport.globalMetricReport.currentMetrics['googAvailableReceiveBandwidth'] = 2400 * 1000;
         policy.updateMetrics(metricReport);
-        policy.setRemoteSourcePriority();
+        preferences = [];
+        policy.setRemoteSourcePriority(preferences);
         resub = policy.wantsResubscribe();
         expect(resub).to.equal(true);
         received = policy.chooseSubscriptions();
-        expect(received.array()).to.deep.equal([2, 4, 6, 8]);
+        expect(received.array()).to.deep.equal([]);
     });
 
 
@@ -225,9 +209,6 @@ describe('VideoPriorityBasedPolicy', () => {
         resub = policy.wantsResubscribe();
         expect(resub).to.equal(false);
 
-        //let newPreferences: VideoPreference[] =[];
-        //newPreferences.push(new VideoPreference('attendee-2', 1));
-        //policy.setRemoteSourcePriority(newPreferences);
         preferences = [];
         preferences.push(new VideoPreference('attendee-2', 1));
         policy.setRemoteSourcePriority(preferences);
@@ -246,6 +227,10 @@ describe('VideoPriorityBasedPolicy', () => {
       const metricReport = new DefaultClientMetricReport(logger);
       metricReport.globalMetricReport = new GlobalMetricReport();
       metricReport.globalMetricReport.currentMetrics['googAvailableReceiveBandwidth'] = 10000 * 1000;
+      let preferences: VideoPreference[] =[];
+      preferences.push(new VideoPreference('attendee-2', 1));
+      preferences.push(new VideoPreference('attendee-1', 2));
+      policy.setRemoteSourcePriority(preferences);
       let resub = policy.wantsResubscribe();
       expect(resub).to.equal(true);
       let received = policy.chooseSubscriptions();
@@ -257,10 +242,6 @@ describe('VideoPriorityBasedPolicy', () => {
       resub = policy.wantsResubscribe();
       expect(resub).to.equal(false);
 
-      let preferences: VideoPreference[] =[];
-      preferences.push(new VideoPreference('attendee-2', 1));
-      preferences.push(new VideoPreference('attendee-1', 2));
-      policy.setRemoteSourcePriority(preferences);
       resub = policy.wantsResubscribe();
       expect(resub).to.equal(false);
 

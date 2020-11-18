@@ -2,12 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { Maybe } from '..';
+import Logger from '../logger/Logger';
 import VideoAdaptivePolicy from './VideoAdaptivePolicy';
 import VideoPreference from './VideoPreference';
 
 export default class VideoPriorityBasedPolicy extends VideoAdaptivePolicy {
 
-  setRemoteSourcePriority(preferences?: VideoPreference[]): void {
+  constructor(protected logger: Logger) {
+    super(logger);
+    this.videoPreferences = [];
+  }
+
+  setRemoteSourcePriority(preferences: VideoPreference[]): void {
     if (this.isPreferencesDifferent(preferences)) {
       this.videoPreferences = preferences;
       this.videoPreferencesUpdated = true;

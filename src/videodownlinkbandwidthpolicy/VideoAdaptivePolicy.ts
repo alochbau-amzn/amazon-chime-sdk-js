@@ -194,7 +194,7 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
     const streamSelectionSet = new DefaultVideoStreamIdSet();
     const lastProbeState = this.rateProbeState;
     const remoteInfos: VideoStreamDescription[] = this.videoIndex.remoteStreamDescriptions();
-    if (remoteInfos.length === 0) {
+    if (remoteInfos.length === 0 || (!!this.videoPreferences && this.videoPreferences.length === 0)) {
       return streamSelectionSet;
     }
     const pausedStreamIds = new DefaultVideoStreamIdSet();

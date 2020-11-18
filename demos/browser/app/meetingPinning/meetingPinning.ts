@@ -8,7 +8,6 @@ import {
   AsyncScheduler,
   AudioVideoFacade,
   AudioVideoObserver,
-//  DefaultClientMetricReport,
   ClientMetricReport,
   ConsoleLogger,
   ContentShareObserver,
@@ -20,8 +19,6 @@ import {
   Device,
   DefaultBrowserBehavior,
   DeviceChangeObserver,
-//  ClientMetricReportDirection,
-//  ClientMetricReportMediaType,
   LogLevel,
   Logger,
   MultiLogger,
@@ -36,7 +33,8 @@ import {
   VideoTileState,
   ClientVideoStreamReceivingReport,
   VideoPriorityBasedPolicy,
-  VideoPreference
+  VideoPreference,
+  VideoSource
 } from '../../../../src/index';
 
 class DemoTileOrganizer {
@@ -137,6 +135,7 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
   defaultBrowserBehaviour: DefaultBrowserBehavior;
   // eslint-disable-next-line
   roster: any = {};
+  remoteVideoSources: VideoSource[] = [];
   tileIndexToTileId: { [id: number]: number } = {};
   tileIdToTileIndex: { [id: number]: number } = {};
 
@@ -674,59 +673,9 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
     }
   }
 
- /*  metricsDidReceive(clientMetricReport: DefaultClientMetricReport): void {
-    this.getStatsForOutbound();
-    const metricReport = clientMetricReport.getObservableMetrics();
-    const tiles = this.audioVideo.getAllVideoTiles();
-    const upStreamReports = clientMetricReport.getMetricMap(ClientMetricReportMediaType.VIDEO,  ClientMetricReportDirection.UPSTREAM);
-    for (const report in upStreamReports) {
-      this.log(`${report} ${upStreamReports[report].source}`);
-    }
-    const downStreamReports = clientMetricReport.getMetricMap(ClientMetricReportMediaType.VIDEO,  ClientMetricReportDirection.DOWNSTREAM);
-    for (const report in downStreamReports) {
-      this.log(`${report} ${downStreamReports[report].source}`);
-    }
-
-    for (const ssrcStr in clientMetricReport.streamMetricReports) {
-      const ssrc = Number(ssrcStr);
-      if (clientMetricReport.streamMetricReports[ssrc].mediaType === ClientMetricReportMediaType.VIDEO) {
-        if (clientMetricReport.streamMetricReports[ssrc].direction === ClientMetricReportDirection.DOWNSTREAM) {
-          let streamId = clientMetricReport.streamMetricReports[ssrc].streamId;
-          for (const tile of tiles) {
-            const state = tile.state();
-            if (streamId === state.streamId) {
-              this.log(`ssrc ${ssrc} attendeeID ${state.boundAttendeeId}`);
-            }
-          }
-        }
-      }
-    }
-    if (typeof metricReport.availableSendBandwidth === 'number' && !isNaN(metricReport.availableSendBandwidth)) {
-      (document.getElementById('video-uplink-bandwidth') as HTMLSpanElement).innerText =
-        'Available Uplink Bandwidth: ' + String(metricReport.availableSendBandwidth / 1000) + ' Kbps';
-    } else if (typeof metricReport.availableOutgoingBitrate === 'number' && !isNaN(metricReport.availableOutgoingBitrate)) {
-      (document.getElementById('video-uplink-bandwidth') as HTMLSpanElement).innerText =
-        'Available Uplink Bandwidth: ' + String(metricReport.availableOutgoingBitrate / 1000) + ' Kbps';
-    } else {
-      (document.getElementById('video-uplink-bandwidth') as HTMLSpanElement).innerText =
-        'Available Uplink Bandwidth: Unknown';
-    }
-
-    if (typeof metricReport.availableReceiveBandwidth === 'number' && !isNaN(metricReport.availableReceiveBandwidth)) {
-      (document.getElementById('video-downlink-bandwidth') as HTMLSpanElement).innerText =
-        'Available Downlink Bandwidth: ' + String(metricReport.availableReceiveBandwidth / 1000) + ' Kbps';
-    } else if (typeof metricReport.availableIncomingBitrate === 'number' && !isNaN(metricReport.availableIncomingBitrate)) {
-      (document.getElementById('video-downlink-bandwidth') as HTMLSpanElement).innerText =
-        'Available Downlink Bandwidth: ' + String(metricReport.availableIncomingBitrate / 1000) + ' Kbps';
-    } else {
-      (document.getElementById('video-downlink-bandwidth') as HTMLSpanElement).innerText =
-        'Available Downlink Bandwidth: Unknown';
-    }
-  } */
-
   async initializeMeetingSession(configuration: MeetingSessionConfiguration): Promise<void> {
     let logger: Logger;
-    const logLevel = LogLevel.DEBUG;
+    const logLevel = LogLevel.INFO;
     const consoleLogger = logger = new ConsoleLogger('SDK', logLevel);
     if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
       logger = consoleLogger;
@@ -1418,26 +1367,26 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
     }
   }
 
-videoTilePin(e:any) {
-  const pauseButtonElement = e.target; //document.getElementById(`video-pause-${tileIndex}`) as HTMLButtonElement;
-  const tileIndex = parseInt(pauseButtonElement.id.substring(12));
-  const tileId = demoApp.tileIndexToTileId[tileIndex];
-  const tile = demoApp.audioVideo.getVideoTile(tileId);
-  const tileState  = tile.state();
+  videoTilePin(e:any) {
+    const pauseButtonElement = e.target; //document.getElementById(`video-pause-${tileIndex}`) as HTMLButtonElement;
+    const tileIndex = parseInt(pauseButtonElement.id.substring(12));
+    const tileId = demoApp.tileIndexToTileId[tileIndex];
+    const tile = demoApp.audioVideo.getVideoTile(tileId);
+    const tileState  = tile.state();
 
-  const attendeeId = tileState.boundAttendeeId;
-    if (demoApp.roster[attendeeId].active ) {
-      pauseButtonElement.innerText = 'Pin';
-      demoApp.roster[attendeeId].active = false;
-      demoApp.updateRoster();
-    } else {
-      pauseButtonElement.innerText = 'Unpin';
-      demoApp.roster[attendeeId].active = true;
-      demoApp.updateRoster();
-    }
-    demoApp.log(`pin click attendee: ${attendeeId} tileIndex: ${tileIndex} active:${demoApp.roster[attendeeId].active}`);
-    demoApp.layoutVideoTiles();
-}
+    const attendeeId = tileState.boundAttendeeId;
+      if (demoApp.roster[attendeeId].active ) {
+        pauseButtonElement.innerText = 'Pin';
+        demoApp.roster[attendeeId].active = false;
+        demoApp.updateRoster();
+      } else {
+        pauseButtonElement.innerText = 'Unpin';
+        demoApp.roster[attendeeId].active = true;
+        demoApp.updateRoster();
+      }
+      demoApp.log(`videoTilePin click attendee: ${attendeeId} tileIndex: ${tileIndex} active:${demoApp.roster[attendeeId].active}`);
+      demoApp.layoutVideoTiles();
+  }
 
   videoTileDidUpdate(tileState: VideoTileState): void {
     this.log(`video tile updated: ${JSON.stringify(tileState, null, '  ')}`);
@@ -1457,18 +1406,7 @@ videoTilePin(e:any) {
 
     this.log(`binding video tile ${tileState.tileId} to ${videoElement.id}`);
     this.audioVideo.bindVideoElement(tileState.tileId, videoElement);
-    if (!(this.roster.hasOwnProperty(tileState.boundAttendeeId))) {
-      this.roster[tileState.boundAttendeeId] = {
-        name: (tileState.boundExternalUserId.split('#').slice(-1)[0]) + (tileState.isContent ? ' «Content»' : ''),
-      };
-      this.updateRoster();
-    } else {
-      if (this.roster[tileState.boundAttendeeId].active ) {
-        pauseButtonElement.innerText = 'Unpin';
-      } else {
-        pauseButtonElement.innerText = 'Pin';
-      }
-    }
+
     this.tileIndexToTileId[tileIndex] = tileState.tileId;
     this.tileIdToTileIndex[tileState.tileId] = tileIndex;
     let name = tileState.boundAttendeeId.split('profile-');
@@ -1541,6 +1479,27 @@ videoTilePin(e:any) {
     return null;
   }
 
+  remoteVideoSourcesDidChange(videoSources: VideoSource[]) {
+    this.log(`remoteVideoSourcesDidChange: ${JSON.stringify(videoSources)}`);
+    this.remoteVideoSources = videoSources;
+    for (const attendeeId in this.roster) {
+      this.roster[attendeeId].hasVideo = false;
+    }
+    for(const source of videoSources) {
+      if (!(this.roster.hasOwnProperty(source.attendee.attendeeId))) {
+        this.roster[source.attendee.attendeeId] = {
+          name: (source.attendee.attendeeId),
+          hasVideo: true
+        };
+        this.updateRoster();
+      }
+      else {
+        this.roster[source.attendee.attendeeId].hasVideo = true;
+      }
+    }
+    this.updateDownlinkPreference();
+  }
+
   pinnedTiles(): number[] {
     let pinned: number[] = [];
     for (const attendeeId in this.roster) {
@@ -1555,10 +1514,10 @@ videoTilePin(e:any) {
   }
 
   updateDownlinkPreference(): void {
-    let videoPreferences: VideoPreference[];
-    if (this.pinnedTiles().length !== 0) {
-      videoPreferences = [];
-      for (const attendeeId in this.roster) {
+    let videoPreferences: VideoPreference[] = [];
+    console.log(`updateDownlinkPreference pinnedTiles:${JSON.stringify(this.pinnedTiles())} roster:${JSON.stringify(this.roster)}`);
+    for (const attendeeId in this.roster) {
+      if (this.roster[attendeeId].hasVideo) {
         if (this.roster[attendeeId].active) {
           videoPreferences.push(new VideoPreference(attendeeId, 1));
         }
