@@ -163,14 +163,18 @@ export default class CreatePeerConnectionTask extends BaseTask implements Remova
       trackId = track.id;
     }
     const attendeeId = this.context.videoStreamIndex.attendeeIdForTrack(trackId);
-    if (this.context.videoTileController.haveVideoTileForAttendeeId(attendeeId)) {
-      this.context.logger.info(
-        `Not adding remote track. Already have tile for attendeeId:  ${attendeeId}`
-      );
-      return;
+    let tile = this.context.videoTileController.getVideoTileForAttendeeId(attendeeId);
+    if (tile) {
+      if (tile.state().boundVideoStream) {
+        this.context.logger.info(
+          `Not adding remote track. Already have tile for attendeeId:  ${attendeeId}`
+        );
+        return;
+      }
+    } else {
+      tile = this.context.videoTileController.addVideoTile();
     }
 
-    const tile = this.context.videoTileController.addVideoTile();
     let streamId: number | null = this.context.videoStreamIndex.streamIdForTrack(trackId);
     if (typeof streamId === 'undefined') {
       this.logger.warn(`stream not found for tile=${tile.id()} track=${trackId}`);

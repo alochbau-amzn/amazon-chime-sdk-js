@@ -249,7 +249,7 @@ export default class DefaultSignalingClient implements SignalingClient {
       );
       return;
     }
-    if (!message.audioMetadata) this.logger.debug(() => `received: ${JSON.stringify(message)}`);
+    this.logger.debug(() => `received: ${JSON.stringify(message)}`);
     if (this.webSocket.readyState() === WebSocketReadyState.Open) {
       this.sendEvent(
         new SignalingClientEvent(this, SignalingClientEventType.ReceivedSignalFrame, message)
@@ -297,6 +297,7 @@ export default class DefaultSignalingClient implements SignalingClient {
       case SignalingClientEventType.WebSocketMessage:
       case SignalingClientEventType.ReceivedSignalFrame:
       case SignalingClientEventType.WebSocketSentMessage:
+        this.logger.debug(() => `notifying event: ${SignalingClientEventType[event.type]}`);
         break;
       case SignalingClientEventType.WebSocketSkippedMessage:
         this.logger.debug(
@@ -307,6 +308,7 @@ export default class DefaultSignalingClient implements SignalingClient {
         );
         break;
       default:
+        this.logger.info(`notifying event: ${SignalingClientEventType[event.type]}`);
         break;
     }
 

@@ -72,6 +72,20 @@ export default interface VideoTileController {
   unpauseVideoTile(tileId: number): void;
 
   /**
+   * Pauses the video tile if it exists and sends the updated video tile state
+   * to the meeting session's AudioVideoObserver’s [[videoTileDidUpdate]] callback.
+   * This is an internal API
+   */
+  pauseVideoTileDueToBandwidth(tileId: number): void;
+
+  /**
+   * Unpauses the video tile if it exists and sends the updated video tile state
+   * to the meeting session's AudioVideoObserver’s [[videoTileDidUpdate]] callback.
+   * This is an internal API
+   */
+  unpauseVideoTileDueToBandwidth(tileId: number): void;
+
+  /**
    * Looks up a video tile from its tile id
    */
   getVideoTile(tileId: number): VideoTile | null;
@@ -123,6 +137,11 @@ export default interface VideoTileController {
    * Returns whether at least one video tile has a bound media stream.
    */
   haveVideoTilesWithStreams(): boolean;
+
+  /**
+   * Returns VideoTile associated with attendeeId
+   */
+  getVideoTileForAttendeeId(attendeeId: string): VideoTile;
 
   /**
    * Returns whether an attendeeId is associated with a video tile

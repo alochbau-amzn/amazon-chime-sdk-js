@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 import './stylePinning.scss';
@@ -153,7 +153,6 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
   contentShareType: ContentShareType = ContentShareType.ScreenCapture;
 
   // feature flags
-  enableWebAudio = false;
   enableUnifiedPlanForChromiumBasedBrowsers = true;
   enableSimulcast = true;
 
@@ -322,7 +321,6 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
     optionalFeatures.addEventListener('change', async (_ev: Event) => {
       const collections = optionalFeatures.selectedOptions;
       this.enableSimulcast = false;
-      this.enableWebAudio = false;
       this.enableUnifiedPlanForChromiumBasedBrowsers = true;
       this.log("Feature lists:");
       for (let i = 0; i < collections.length; i++) {
@@ -330,10 +328,6 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
         if (collections[i].value === 'simulcast') {
           this.enableSimulcast = true;
           this.log('attempt to enable simulcast');
-        }
-        if (collections[i].value === 'webaudio') {
-          this.enableWebAudio = true;
-          this.log('attempt to enable webaudio');
         }
       }
     });
@@ -694,7 +688,6 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
     }
     const deviceController = new DefaultDeviceController(logger);
     const videoPriorityBasedPolicy = new VideoPriorityBasedPolicy(logger);
-    configuration.enableWebAudio = this.enableWebAudio;
     configuration.enableUnifiedPlanForChromiumBasedBrowsers = this.enableUnifiedPlanForChromiumBasedBrowsers;
     configuration.attendeePresenceTimeoutMs = 5000;
     configuration.enableSimulcastForUnifiedPlanChromiumBasedBrowsers = this.enableSimulcast;
@@ -1399,6 +1392,7 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
     const tileElement = document.getElementById(`tile-${tileIndex}`) as HTMLDivElement;
     const videoElement = document.getElementById(`video-${tileIndex}`) as HTMLVideoElement;
     const nameplateElement = document.getElementById(`nameplate-${tileIndex}`) as HTMLDivElement;
+    const pauseStateElement = document.getElementById(`pause-state-${tileIndex}`) as HTMLDivElement;
     const pauseButtonElement = document.getElementById(`video-pause-${tileIndex}`) as HTMLButtonElement;
 
     this.log('pauseButtonElement addEventListener for tileIndex ' + tileIndex);
@@ -1411,6 +1405,12 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
     this.tileIdToTileIndex[tileState.tileId] = tileIndex;
     let name = tileState.boundAttendeeId.split('profile-');
     this.updateProperty(nameplateElement, 'innerText', name[1]);
+
+    if (tileState.pausedDueToBandwidth) {
+      this.updateProperty(pauseStateElement, 'innerText', 'PAUSED due to BW');
+    } else {
+      this.updateProperty(pauseStateElement, 'innerText', '');
+    }
     tileElement.style.display = 'block';
     this.layoutVideoTiles();
   }
@@ -1526,7 +1526,7 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
         }
       }
     }
-    this.downlinkPolicy.setRemoteSourcePriority(videoPreferences);
+    this.downlinkPolicy.chooseRemoteVideoSources(videoPreferences);
   }
 
 
@@ -1592,7 +1592,7 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
     const widthToHeightAspectRatio = 16 / 9;
     const maximumRelativeHeightOfOthers = 0.3;
     this.log(`layoutVideoTilesPinned roster:${JSON.stringify(this.roster)}  tiles:${JSON.stringify(pinnedTiles)}}`);
-    const activeRows = pinnedTiles.length/2;
+    const activeRows = (pinnedTiles.length + 1)/2;
     const activeWidth = width;
     const activeHeight = width / widthToHeightAspectRatio * activeRows;
     const othersCount = visibleTileIndices.length - pinnedTiles.length;
@@ -1736,6 +1736,23 @@ export class DemoMeetingApp implements AudioVideoObserver, DeviceChangeObserver,
     nameplate.style.textShadow = '0px 0px 5px black';
     nameplate.style.letterSpacing = '0.1em';
     nameplate.style.fontSize = `${nameplateSize - 6}px`;
+
+    const pauseLabel = document.getElementById(`pause-state-${tileIndex}`) as HTMLDivElement;
+    const pauseLabelSize = 32;
+    const pauseLabelPadding = 10;
+    pauseLabel.style.position = 'absolute';
+    pauseLabel.style.left = `${w/2 - pauseLabelSize}px`;
+    pauseLabel.style.top = `${h/2 - pauseLabelSize - pauseLabelPadding}px`;
+    pauseLabel.style.height = `${pauseLabelSize}px`;
+    pauseLabel.style.width = `${w/2}px`;
+    pauseLabel.style.margin = '0';
+    pauseLabel.style.padding = '0';
+    pauseLabel.style.paddingLeft = `${pauseLabelPadding}px`;
+    pauseLabel.style.color = '#fff';
+    pauseLabel.style.backgroundColor = 'rgba(0,0,0,0)';
+    pauseLabel.style.textShadow = '0px 0px 5px black';
+    pauseLabel.style.letterSpacing = '0.1em';
+    pauseLabel.style.fontSize = `${pauseLabelSize - 6}px`;
 
     let button = document.getElementById(`video-pause-${tileIndex}`) as HTMLButtonElement;
 

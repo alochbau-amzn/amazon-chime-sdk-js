@@ -2,9 +2,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import ClientMetricReport from '../clientmetricreport/ClientMetricReport';
-import VideoDownlinkObserver from './VideoDownlinkObserver';
 import VideoStreamIdSet from '../videostreamidset/VideoStreamIdSet';
 import VideoStreamIndex from '../videostreamindex/VideoStreamIndex';
+import VideoDownlinkObserver from './VideoDownlinkObserver';
 
 /**
  * [[VideoDownlinkBandwidthPolicy]] makes decisions about downlink

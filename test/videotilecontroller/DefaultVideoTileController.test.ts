@@ -190,6 +190,8 @@ describe('DefaultVideoTileController', () => {
       expect(tileController.getVideoTile(tileId).state().paused).to.equal(true);
       tileController.pauseVideoTile(tileId);
       expect(spy.callCount).to.equal(1);
+      tileController.pauseVideoTileDueToBandwidth(tileId);
+      expect(spy.callCount).to.equal(1);
     });
 
     it('does not throw an error when a tile does not exist', () => {
@@ -207,10 +209,58 @@ describe('DefaultVideoTileController', () => {
       expect(!tileController.getVideoTile(tileId).state().paused).to.equal(true);
       tileController.unpauseVideoTile(tileId);
       expect(spy.callCount).to.equal(1);
+      tileController.pauseVideoTile(tileId);
+      tileController.pauseVideoTileDueToBandwidth(tileId);
+      tileController.unpauseVideoTile(tileId);
+      expect(spy.callCount).to.equal(1);
+      tileController.unpauseVideoTileDueToBandwidth(tileId);
+      expect(spy.callCount).to.equal(2);
     });
 
     it('does not throw an error when a tile does not exist', () => {
       tileController.unpauseVideoTile(0);
+    });
+  });
+
+  describe('pauseVideoTileDueToBandwidth', () => {
+    it('pauses a tile due to bandwidth', () => {
+      const spy = sinon.spy(audioVideoController, 'pauseReceivingStream');
+      const tileId = tileController.addVideoTile().id();
+      tileController.pauseVideoTileDueToBandwidth(tileId);
+      expect(spy.callCount).to.equal(1);
+      expect(tileController.getVideoTile(tileId).state().pausedDueToBandwidth).to.equal(true);
+      tileController.pauseVideoTileDueToBandwidth(tileId);
+      expect(spy.callCount).to.equal(1);
+      tileController.pauseVideoTile(tileId);
+      expect(spy.callCount).to.equal(1);
+    });
+
+    it('does not throw an error when a tile does not exist', () => {
+      tileController.pauseVideoTileDueToBandwidth(0);
+    });
+  });
+
+  describe('unpauseVideoTileDueToBandwidth', () => {
+    it('unpauses a tile due to bandwidth', () => {
+      const spy = sinon.spy(audioVideoController, 'resumeReceivingStream');
+      const tileId = tileController.addVideoTile().id();
+      tileController.pauseVideoTileDueToBandwidth(tileId);
+      tileController.unpauseVideoTileDueToBandwidth(tileId);
+      expect(spy.callCount).to.equal(1);
+      expect(tileController.getVideoTile(tileId).state().pausedDueToBandwidth).to.equal(false);
+      tileController.unpauseVideoTileDueToBandwidth(tileId);
+      expect(spy.callCount).to.equal(1);
+      tileController.pauseVideoTileDueToBandwidth(tileId);
+      tileController.pauseVideoTile(tileId);
+      tileController.unpauseVideoTileDueToBandwidth(tileId);
+      expect(spy.callCount).to.equal(1);
+      tileController.unpauseVideoTile(tileId);
+      expect(spy.callCount).to.equal(2);
+      expect(tileController.getVideoTile(tileId).state().pausedDueToBandwidth).to.equal(false);
+    });
+
+    it('does not throw an error when a tile does not exist', () => {
+      tileController.unpauseVideoTileDueToBandwidth(0);
     });
   });
 

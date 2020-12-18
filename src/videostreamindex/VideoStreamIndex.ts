@@ -80,6 +80,11 @@ export default interface VideoStreamIndex {
   externalUserIdForTrack(trackId: string): string;
 
   /**
+   * Returns external user id for attendee id
+   */
+  externalUserIdForAttendeeId(trackId: string): string;
+
+  /**
    * Returns attendee id for a stream id
    */
   attendeeIdForStreamId(streamId: number): string;

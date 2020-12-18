@@ -1,4 +1,4 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
 import { Maybe } from '..';
@@ -7,13 +7,18 @@ import VideoAdaptivePolicy from './VideoAdaptivePolicy';
 import VideoPreference from './VideoPreference';
 
 export default class VideoPriorityBasedPolicy extends VideoAdaptivePolicy {
-
   constructor(protected logger: Logger) {
     super(logger);
     this.videoPreferences = [];
+    this.pauseTiles = true;
   }
 
-  setRemoteSourcePriority(preferences: VideoPreference[]): void {
+  reset(): void {
+    super.reset();
+    this.pauseTiles = true;
+  }
+
+  chooseRemoteVideoSources(preferences: VideoPreference[]): void {
     if (this.isPreferencesDifferent(preferences)) {
       this.videoPreferences = preferences;
       this.videoPreferencesUpdated = true;
@@ -21,24 +26,25 @@ export default class VideoPriorityBasedPolicy extends VideoAdaptivePolicy {
       if (this.wantsResubscribe()) {
         this.logger.info(`videoPriorityBasedPolicy wants a resubscribe`);
         this.forEachObserver(observer => {
-          Maybe.of(observer.wantsResubscribe).map(f =>
-            f.bind(observer)()
-          );
+          Maybe.of(observer.wantsResubscribe).map(f => f.bind(observer)());
         });
       }
     }
   }
 
   private isPreferencesDifferent(preferences: VideoPreference[]): boolean {
-    if (preferences === undefined && this.videoPreferences === undefined) {
-      return false;
-    }
-    else if (preferences === undefined || this.videoPreferences === undefined || preferences.length !== this.videoPreferences.length) {
+    if (preferences.length !== this.videoPreferences.length) {
       return true;
     }
 
     for (const preference of preferences) {
-      if (this.videoPreferences.findIndex(videoPreference => videoPreference.attendeeId === preference.attendeeId && videoPreference.priority === preference.priority) === -1) {
+      if (
+        this.videoPreferences.findIndex(
+          videoPreference =>
+            videoPreference.attendeeId === preference.attendeeId &&
+            videoPreference.priority === preference.priority
+        ) === -1
+      ) {
         return true;
       }
     }

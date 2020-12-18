@@ -65,6 +65,20 @@ export default interface VideoTile {
   unpause(): void;
 
   /**
+   * Pauses the tile to downlink bandwidth policy.
+   * The updated video tile state is sent to the meeting session’s
+   * AudioVideoObserver's [[videoTileDidUpdate]] callback.
+   */
+  pauseDueToBandwidth(): void;
+
+  /**
+   * Unpauses the tile to downlink bandwidth policy.
+   * The updated video tile state is sent to the meeting session’s
+   * AudioVideoObserver's [[videoTileDidUpdate]] callback.
+   */
+  unpauseDueToBandwidth(): void;
+
+  /**
    * Marks the tile as having poor connection returning whether it was previously unmarked.
    * The updated video tile state is sent to the meeting session’s
    * AudioVideoObserver's [[videoTileDidUpdate]] callback.

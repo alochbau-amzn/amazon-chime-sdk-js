@@ -1,6 +1,8 @@
 // Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
 
+import SimulcastLayers from '../simulcastlayers/SimulcastLayers';
+
 /**
  * [[VideoTileState]] encapsulates the state of a [[VideoTile]]
  */
@@ -34,6 +36,11 @@ export default class VideoTileState {
    * Indication of whether the tile has paused video stream.
    */
   paused: boolean = false;
+
+  /**
+   * Indication of whether tile was paused due to insufficient downlink bandwidth
+   */
+  pausedDueToBandwidth: boolean = false;
 
   /**
    * Indication of whether the remote video is paused at publishing attendee. This field is not supported.
@@ -103,6 +110,11 @@ export default class VideoTileState {
   videoElementPhysicalHeightPixels: number | null = null;
 
   /**
+   * The estimated simulcast stream being received
+   */
+  simulcastLayer: SimulcastLayers = SimulcastLayers.High;
+
+  /**
    * The unique identifier published by server to associate with bound video stream. It is defined in [[SignalingProtocol.proto]].
    * Developers should avoid using this field directly.
    */
@@ -115,6 +127,7 @@ export default class VideoTileState {
     cloned.isContent = this.isContent;
     cloned.active = this.active;
     cloned.paused = this.paused;
+    cloned.pausedDueToBandwidth = this.pausedDueToBandwidth;
     cloned.poorConnection = this.poorConnection;
     cloned.boundAttendeeId = this.boundAttendeeId;
     cloned.boundExternalUserId = this.boundExternalUserId;
@@ -129,6 +142,7 @@ export default class VideoTileState {
     cloned.videoElementPhysicalWidthPixels = this.videoElementPhysicalWidthPixels;
     cloned.videoElementPhysicalHeightPixels = this.videoElementPhysicalHeightPixels;
     cloned.streamId = this.streamId;
+    cloned.simulcastLayer = this.simulcastLayer;
     return cloned;
   }
 }

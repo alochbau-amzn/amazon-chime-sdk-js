@@ -2,18 +2,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import ContentShareConstants from '../contentsharecontroller/ContentShareConstants';
-import VideoAdaptivePolicy from './VideoAdaptivePolicy';
-import VideoPreference from './VideoPreference';
 import VideoStreamDescription from '../videostreamindex/VideoStreamDescription';
 import VideoStreamIndex from '../videostreamindex/VideoStreamIndex';
-
+import VideoAdaptivePolicy from './VideoAdaptivePolicy';
+import VideoPreference from './VideoPreference';
 
 export default class VideoAdaptiveProbePolicy extends VideoAdaptivePolicy {
-
   updateIndex(videoIndex: VideoStreamIndex): void {
     super.updateIndex(videoIndex);
 
-    const preferences: VideoPreference[] =[];
+    const preferences: VideoPreference[] = [];
     let containsContent = false;
     const remoteInfos: VideoStreamDescription[] = videoIndex.remoteStreamDescriptions();
     // If there is active content then set that as high priority, and the rest at lower

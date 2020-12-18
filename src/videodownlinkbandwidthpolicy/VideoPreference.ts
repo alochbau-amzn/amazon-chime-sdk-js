@@ -1,5 +1,6 @@
-// Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: Apache-2.0
+
 import SimulcastLayers from '../simulcastlayers/SimulcastLayers';
 
 export default class VideoStreamPreference {
@@ -14,15 +15,15 @@ export default class VideoStreamPreference {
   priority: number;
 
   /**
-   * The maximum simulcast layers to receive.
+   * The desired maximum simulcast layers to receive.
    */
-  maxSize: SimulcastLayers = SimulcastLayers.High;
+  desiredMaxSize: SimulcastLayers = SimulcastLayers.High;
 
   constructor(attendeeId: string, priority: number, maxSize?: SimulcastLayers) {
     this.attendeeId = attendeeId;
     this.priority = priority;
     if (!!maxSize) {
-      this.maxSize = maxSize;
+      this.desiredMaxSize = maxSize;
     }
   }
 }

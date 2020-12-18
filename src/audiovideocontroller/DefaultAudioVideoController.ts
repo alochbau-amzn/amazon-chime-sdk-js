@@ -60,11 +60,11 @@ import TimeoutTask from '../task/TimeoutTask';
 import WaitForAttendeePresenceTask from '../task/WaitForAttendeePresenceTask';
 import DefaultTransceiverController from '../transceivercontroller/DefaultTransceiverController';
 import SimulcastTransceiverController from '../transceivercontroller/SimulcastTransceiverController';
-import VideoDownlinkObserver from '../videodownlinkbandwidthpolicy/VideoDownlinkObserver';
 import DefaultVideoCaptureAndEncodeParameter from '../videocaptureandencodeparameter/DefaultVideoCaptureAndEncodeParameter';
 import AllHighestVideoBandwidthPolicy from '../videodownlinkbandwidthpolicy/AllHighestVideoBandwidthPolicy';
 import VideoAdaptivePolicy from '../videodownlinkbandwidthpolicy/VideoAdaptivePolicy';
 import VideoAdaptiveProbePolicy from '../videodownlinkbandwidthpolicy/VideoAdaptiveProbePolicy';
+import VideoDownlinkObserver from '../videodownlinkbandwidthpolicy/VideoDownlinkObserver';
 import VideoSource from '../videosource/VideoSource';
 import DefaultVideoStreamIdSet from '../videostreamidset/DefaultVideoStreamIdSet';
 import DefaultVideoStreamIndex from '../videostreamindex/DefaultVideoStreamIndex';
@@ -266,17 +266,17 @@ export default class DefaultAudioVideoController
       );
       simulcastPolicy.addObserver(this);
       this.meetingSessionContext.videoUplinkBandwidthPolicy = simulcastPolicy;
-      let videoAdaptiveProbePolicy;
       if (
         !(this.meetingSessionContext.videoDownlinkBandwidthPolicy instanceof VideoAdaptivePolicy)
       ) {
-        videoAdaptiveProbePolicy = new VideoAdaptiveProbePolicy(this.logger);
+        const videoAdaptiveProbePolicy = new VideoAdaptiveProbePolicy(this.logger);
         this.meetingSessionContext.videoDownlinkBandwidthPolicy = videoAdaptiveProbePolicy;
+        videoAdaptiveProbePolicy.setTileController(this.meetingSessionContext.videoTileController);
       } else {
-        videoAdaptiveProbePolicy = this.meetingSessionContext
+        const videoAdaptivePolicy = this.meetingSessionContext
           .videoDownlinkBandwidthPolicy as VideoAdaptivePolicy;
+        videoAdaptivePolicy.setTileController(this.meetingSessionContext.videoTileController);
       }
-      videoAdaptiveProbePolicy.setTileController(this.meetingSessionContext.videoTileController);
 
       this.meetingSessionContext.videoStreamIndex = new SimulcastVideoStreamIndex(this.logger);
     } else {

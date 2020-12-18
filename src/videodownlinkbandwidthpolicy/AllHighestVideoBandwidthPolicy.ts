@@ -3,10 +3,10 @@
 
 import ClientMetricReport from '../clientmetricreport/ClientMetricReport';
 import DefaultVideoStreamIdSet from '../videostreamidset/DefaultVideoStreamIdSet';
-import VideoDownlinkObserver from './VideoDownlinkObserver';
 import VideoStreamIdSet from '../videostreamidset/VideoStreamIdSet';
 import VideoStreamIndex from '../videostreamindex/VideoStreamIndex';
 import VideoDownlinkBandwidthPolicy from './VideoDownlinkBandwidthPolicy';
+import VideoDownlinkObserver from './VideoDownlinkObserver';
 
 /**
  * [[AllHighestVideoBandwidthPolicy]] implements is a rudimentary policy that simply
@@ -41,9 +41,9 @@ export default class AllHighestVideoBandwidthPolicy implements VideoDownlinkBand
     return this.subscribedReceiveSet.clone();
   }
 
-  addObserver(observer: VideoDownlinkObserver): void {}
+  addObserver(_observer: VideoDownlinkObserver): void {}
 
-  removeObserver(observer: VideoDownlinkObserver): void {}
+  removeObserver(_observer: VideoDownlinkObserver): void {}
 
   private calculateOptimalReceiveSet(videoIndex: VideoStreamIndex): VideoStreamIdSet {
     return videoIndex.highestQualityStreamFromEachGroupExcludingSelf(this.selfAttendeeId);

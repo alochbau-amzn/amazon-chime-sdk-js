@@ -257,6 +257,18 @@ export default class DefaultVideoStreamIndex implements VideoStreamIndex {
     return externalUserId;
   }
 
+  externalUserIdForAttendeeId(attendeeId: string): string {
+    if (!this.currentIndex) {
+      return '';
+    }
+    for (const source of this.currentIndex.sources) {
+      if (source.attendeeId === attendeeId) {
+        return source.externalUserId;
+      }
+    }
+    return '';
+  }
+
   attendeeIdForStreamId(streamId: number): string {
     if (!this.streamToAttendeeMap) {
       if (this.currentIndex) {

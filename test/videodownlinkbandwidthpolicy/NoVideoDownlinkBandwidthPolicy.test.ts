@@ -7,6 +7,7 @@ import DefaultClientMetricReport from '../../src/clientmetricreport/DefaultClien
 import LogLevel from '../../src/logger/LogLevel';
 import NoOpLogger from '../../src/logger/NoOpLogger';
 import NoVideoDownlinkBandwidthPolicy from '../../src/videodownlinkbandwidthpolicy/NoVideoDownlinkBandwidthPolicy';
+import VideoDownlinkObserver from '../../src/videodownlinkbandwidthpolicy/VideoDownlinkObserver';
 import DefaultVideoStreamIndex from '../../src/videostreamindex/DefaultVideoStreamIndex';
 
 describe('NoVideoDownlinkBandwidthPolicy', () => {
@@ -28,6 +29,11 @@ describe('NoVideoDownlinkBandwidthPolicy', () => {
 
   describe('wantsResubscribe', () => {
     it('always returns false', () => {
+      class TestObserver implements VideoDownlinkObserver {
+        wantsResubscribe(): void {}
+      }
+      const observer = new TestObserver();
+      policy.addObserver(observer);
       expect(policy.wantsResubscribe()).to.be.false;
       policy.updateIndex(emptyVideoStreamIndex);
       expect(policy.wantsResubscribe()).to.be.false;
@@ -35,6 +41,7 @@ describe('NoVideoDownlinkBandwidthPolicy', () => {
       metricReport.globalMetricReport.currentMetrics['googAvailableReceiveBandwidth'] = 500;
       policy.updateMetrics(metricReport);
       expect(policy.wantsResubscribe()).to.be.false;
+      policy.removeObserver(observer);
     });
   });
 
