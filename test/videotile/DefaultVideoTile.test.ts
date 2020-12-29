@@ -9,6 +9,7 @@ import NoOpAudioVideoController from '../../src/audiovideocontroller/NoOpAudioVi
 import DevicePixelRatioMonitor from '../../src/devicepixelratiomonitor/DevicePixelRatioMonitor';
 import DevicePixelRatioObserver from '../../src/devicepixelratioobserver/DevicePixelRatioObserver';
 import TimeoutScheduler from '../../src/scheduler/TimeoutScheduler';
+import SimulcastLayers from '../../src/simulcastlayers/SimulcastLayers';
 import NoOpVideoElementFactory from '../../src/videoelementfactory/NoOpVideoElementFactory';
 import DefaultVideoTile from '../../src/videotile/DefaultVideoTile';
 import VideoTileController from '../../src/videotilecontroller/VideoTileController';
@@ -417,6 +418,31 @@ describe('DefaultVideoTile', () => {
       tile.pause();
       expect(tileControllerSpy.callCount).to.equal(2);
     });
+
+    it('pauses due to bandwidth', () => {
+      tile = new DefaultVideoTile(tileId, true, tileController, monitor);
+      expect(tileControllerSpy.callCount).to.equal(1);
+      const videoElement = videoElementFactory.create();
+      tile.bindVideoElement(videoElement);
+      tile.bindVideoStream('attendee', true, mockVideoStream, 1, 1, 1);
+      expect(tileControllerSpy.callCount).to.equal(3);
+
+      tile.pauseDueToBandwidth();
+      expect(tile.state().pausedDueToBandwidth).to.equal(true);
+      expect(tileControllerSpy.callCount).to.equal(4);
+    });
+
+    it("cannot pause by bandwidth a tile if it's already paused", () => {
+      tile = new DefaultVideoTile(tileId, true, tileController, monitor);
+      tile.bindVideoStream('attendee', true, mockVideoStream, 1, 1, 1);
+      expect(tileControllerSpy.callCount).to.equal(2);
+
+      tile.pauseDueToBandwidth();
+      expect(tileControllerSpy.callCount).to.equal(3);
+
+      tile.pauseDueToBandwidth();
+      expect(tileControllerSpy.callCount).to.equal(3);
+    });
   });
 
   describe('unpause', () => {
@@ -439,6 +465,29 @@ describe('DefaultVideoTile', () => {
 
       tile.unpause();
       expect(tileControllerSpy.callCount).to.equal(1);
+    });
+
+    it('unpauses a paused by bandwidth tile', () => {
+      tile = new DefaultVideoTile(tileId, true, tileController, monitor);
+      tile.bindVideoStream('attendee', true, mockVideoStream, 1, 1, 1);
+      expect(tileControllerSpy.callCount).to.equal(2);
+
+      tile.pauseDueToBandwidth();
+      expect(tile.state().pausedDueToBandwidth).to.equal(true);
+      expect(tileControllerSpy.callCount).to.equal(3);
+
+      tile.unpauseDueToBandwidth();
+      expect(tile.state().pausedDueToBandwidth).to.equal(false);
+      expect(tileControllerSpy.callCount).to.equal(4);
+    });
+
+    it("cannot unpause by bandwidth a tile if it's already unpaused", () => {
+      tile = new DefaultVideoTile(tileId, true, tileController, monitor);
+      tile.bindVideoStream('attendee', true, mockVideoStream, 1, 1, 1);
+      expect(tileControllerSpy.callCount).to.equal(2);
+
+      tile.unpauseDueToBandwidth();
+      expect(tileControllerSpy.callCount).to.equal(2);
     });
   });
 
@@ -520,6 +569,33 @@ describe('DefaultVideoTile', () => {
       const image = tile.capture();
       expect(image.width).to.equal(videoElement.width);
       expect(image.height).to.equal(videoElement.height);
+    });
+  });
+
+  describe('simulcastLayerSwitch', () => {
+    it('Calls tile update as appropriate due to simulcast switch', () => {
+      tile = new DefaultVideoTile(tileId, true, tileController, monitor);
+      const boundAttendeeId = 'attendee';
+      const localTile = false;
+      const videoStreamContentWidth = 1;
+      const videoStreamContentHeight = 1;
+      const streamId = 1;
+
+      tile.bindVideoStream(
+        boundAttendeeId,
+        localTile,
+        mockVideoStream,
+        videoStreamContentWidth,
+        videoStreamContentHeight,
+        streamId
+      );
+      expect(tileControllerSpy.callCount).to.equal(2);
+      tile.updateVideoSimulcastStream(2, SimulcastLayers.High);
+      expect(tileControllerSpy.callCount).to.equal(3);
+      tile.updateVideoSimulcastStream(2, SimulcastLayers.Medium);
+      expect(tileControllerSpy.callCount).to.equal(4);
+      tile.updateVideoSimulcastStream(2, SimulcastLayers.Medium);
+      expect(tileControllerSpy.callCount).to.equal(4);
     });
   });
 });

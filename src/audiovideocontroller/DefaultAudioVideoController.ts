@@ -62,7 +62,9 @@ import DefaultTransceiverController from '../transceivercontroller/DefaultTransc
 import SimulcastTransceiverController from '../transceivercontroller/SimulcastTransceiverController';
 import DefaultVideoCaptureAndEncodeParameter from '../videocaptureandencodeparameter/DefaultVideoCaptureAndEncodeParameter';
 import AllHighestVideoBandwidthPolicy from '../videodownlinkbandwidthpolicy/AllHighestVideoBandwidthPolicy';
+import VideoAdaptivePolicy from '../videodownlinkbandwidthpolicy/VideoAdaptivePolicy';
 import VideoAdaptiveProbePolicy from '../videodownlinkbandwidthpolicy/VideoAdaptiveProbePolicy';
+import VideoDownlinkObserver from '../videodownlinkbandwidthpolicy/VideoDownlinkObserver';
 import VideoSource from '../videosource/VideoSource';
 import DefaultVideoStreamIdSet from '../videostreamidset/DefaultVideoStreamIdSet';
 import DefaultVideoStreamIndex from '../videostreamindex/DefaultVideoStreamIndex';
@@ -78,7 +80,7 @@ import WebSocketAdapter from '../websocketadapter/WebSocketAdapter';
 import AudioVideoControllerState from './AudioVideoControllerState';
 
 export default class DefaultAudioVideoController
-  implements AudioVideoController, SimulcastUplinkObserver {
+  implements AudioVideoController, SimulcastUplinkObserver, VideoDownlinkObserver {
   private _logger: Logger;
   private _configuration: MeetingSessionConfiguration;
   private _webSocketAdapter: WebSocketAdapter;
@@ -264,10 +266,18 @@ export default class DefaultAudioVideoController
       );
       simulcastPolicy.addObserver(this);
       this.meetingSessionContext.videoUplinkBandwidthPolicy = simulcastPolicy;
-      this.meetingSessionContext.videoDownlinkBandwidthPolicy = new VideoAdaptiveProbePolicy(
-        this.logger,
-        this.meetingSessionContext.videoTileController
-      );
+      if (
+        !(this.meetingSessionContext.videoDownlinkBandwidthPolicy instanceof VideoAdaptivePolicy)
+      ) {
+        const videoAdaptiveProbePolicy = new VideoAdaptiveProbePolicy(this.logger);
+        this.meetingSessionContext.videoDownlinkBandwidthPolicy = videoAdaptiveProbePolicy;
+        videoAdaptiveProbePolicy.setTileController(this.meetingSessionContext.videoTileController);
+      } else {
+        const videoAdaptivePolicy = this.meetingSessionContext
+          .videoDownlinkBandwidthPolicy as VideoAdaptivePolicy;
+        videoAdaptivePolicy.setTileController(this.meetingSessionContext.videoTileController);
+      }
+
       this.meetingSessionContext.videoStreamIndex = new SimulcastVideoStreamIndex(this.logger);
     } else {
       this.meetingSessionContext.enableSimulcast = false;
@@ -284,6 +294,7 @@ export default class DefaultAudioVideoController
       }
       this.meetingSessionContext.audioProfile = this._audioProfile;
     }
+    this.meetingSessionContext.videoDownlinkBandwidthPolicy.addObserver(this);
 
     this.meetingSessionContext.lastKnownVideoAvailability = new MeetingSessionVideoAvailability();
     this.meetingSessionContext.videoCaptureAndEncodeParameter = new DefaultVideoCaptureAndEncodeParameter(
@@ -457,6 +468,10 @@ export default class DefaultAudioVideoController
         this.notifyStop(status, error);
       }
     });
+  }
+
+  wantsResubscribe(): void {
+    this.update();
   }
 
   update(): boolean {

@@ -298,10 +298,14 @@ describe('CreatePeerConnectionTask', () => {
         context.videoStreamIndex = new TestVideoStreamIndex(logger);
 
         class TestVideoTileController extends DefaultVideoTileController {
-          haveVideoTileForAttendeeId(attendeeId: string): boolean {
+          getVideoTileForAttendeeId(attendeeId: string): VideoTile {
             expect(attendeeId).to.equal(attendeeIdForTrack);
             called = true;
-            return true;
+            const tile = super.addVideoTile();
+            // @ts-ignore
+            const stream: MediaStream = {};
+            tile.bindVideoStream('attendee', true, stream, 0, 0, 0);
+            return tile;
           }
         }
         context.videoTileController = new TestVideoTileController(
@@ -317,6 +321,42 @@ describe('CreatePeerConnectionTask', () => {
         );
         expect(called).to.be.true;
         expect(addVideoTileSpy.called).to.be.false;
+      });
+
+      it('process track event when attendee ID already associated with tile but no Media Stream', async () => {
+        const tile = context.videoTileController.addVideoTile();
+        const bindVideoStreamSpy: sinon.SinonSpy = sinon.spy(tile, 'bindVideoStream');
+
+        let called = false;
+
+        const attendeeIdForTrack = 'attendee-id';
+        class TestVideoStreamIndex extends DefaultVideoStreamIndex {
+          attendeeIdForTrack(_trackId: string): string {
+            return attendeeIdForTrack;
+          }
+        }
+        context.videoStreamIndex = new TestVideoStreamIndex(logger);
+
+        class TestVideoTileController extends DefaultVideoTileController {
+          getVideoTileForAttendeeId(attendeeId: string): VideoTile {
+            expect(attendeeId).to.equal(attendeeIdForTrack);
+            called = true;
+            return tile;
+          }
+        }
+        context.videoTileController = new TestVideoTileController(
+          new DefaultVideoTileFactory(),
+          context.audioVideoController,
+          logger
+        );
+
+        await task.run();
+        await context.peer.setRemoteDescription(videoRemoteDescription);
+        await new Promise(resolve =>
+          new TimeoutScheduler(domMockBehavior.asyncWaitMs + 10).start(resolve)
+        );
+        expect(called).to.be.true;
+        expect(bindVideoStreamSpy.called).to.be.true;
       });
 
       it('can have a stream ID', async () => {

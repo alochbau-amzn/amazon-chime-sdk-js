@@ -19,6 +19,7 @@ export default class DefaultVideoTileController implements VideoTileController {
   private currentLocalTile: VideoTile | null = null;
   private devicePixelRatioMonitor: DevicePixelRatioMonitor;
   private currentPausedTilesByIds: Set<number> = new Set<number>();
+  private currentPausedBwTilesByIds: Set<number> = new Set<number>();
 
   constructor(
     private tileFactory: VideoTileFactory,
@@ -86,7 +87,9 @@ export default class DefaultVideoTileController implements VideoTileController {
     const tile = this.getVideoTile(tileId);
     if (tile) {
       if (!this.currentPausedTilesByIds.has(tileId)) {
-        this.audioVideoController.pauseReceivingStream(tile.stateRef().streamId);
+        if (!this.currentPausedBwTilesByIds.has(tileId)) {
+          this.audioVideoController.pauseReceivingStream(tile.stateRef().streamId);
+        }
         this.currentPausedTilesByIds.add(tileId);
       }
       tile.pause();
@@ -97,10 +100,38 @@ export default class DefaultVideoTileController implements VideoTileController {
     const tile = this.getVideoTile(tileId);
     if (tile) {
       if (this.currentPausedTilesByIds.has(tileId)) {
-        this.audioVideoController.resumeReceivingStream(tile.stateRef().streamId);
+        if (!this.currentPausedBwTilesByIds.has(tileId)) {
+          this.audioVideoController.resumeReceivingStream(tile.stateRef().streamId);
+        }
         this.currentPausedTilesByIds.delete(tileId);
       }
       tile.unpause();
+    }
+  }
+
+  pauseVideoTileDueToBandwidth(tileId: number): void {
+    const tile = this.getVideoTile(tileId);
+    if (tile) {
+      if (!this.currentPausedBwTilesByIds.has(tileId)) {
+        if (!this.currentPausedTilesByIds.has(tileId)) {
+          this.audioVideoController.pauseReceivingStream(tile.stateRef().streamId);
+        }
+        this.currentPausedBwTilesByIds.add(tileId);
+      }
+      tile.pauseDueToBandwidth();
+    }
+  }
+
+  unpauseVideoTileDueToBandwidth(tileId: number): void {
+    const tile = this.getVideoTile(tileId);
+    if (tile) {
+      if (this.currentPausedBwTilesByIds.has(tileId)) {
+        if (!this.currentPausedTilesByIds.has(tileId)) {
+          this.audioVideoController.resumeReceivingStream(tile.stateRef().streamId);
+        }
+        this.currentPausedBwTilesByIds.delete(tileId);
+      }
+      tile.unpauseDueToBandwidth();
     }
   }
 
@@ -198,6 +229,16 @@ export default class DefaultVideoTileController implements VideoTileController {
       }
     }
     return false;
+  }
+
+  getVideoTileForAttendeeId(attendeeId: string): VideoTile {
+    for (const tile of this.getAllVideoTiles()) {
+      const state = tile.state();
+      if (state.boundAttendeeId === attendeeId) {
+        return tile;
+      }
+    }
+    return null;
   }
 
   captureVideoTile(tileId: number): ImageData | null {

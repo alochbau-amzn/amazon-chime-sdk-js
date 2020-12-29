@@ -12,6 +12,7 @@ import {
   SdkStreamMediaType,
 } from '../../src/signalingprotocol/SignalingProtocol.js';
 import AllHighestVideoBandwidthPolicy from '../../src/videodownlinkbandwidthpolicy/AllHighestVideoBandwidthPolicy';
+import VideoDownlinkObserver from '../../src/videodownlinkbandwidthpolicy/VideoDownlinkObserver';
 import DefaultVideoStreamIndex from '../../src/videostreamindex/DefaultVideoStreamIndex';
 
 describe('AllHighestVideoBandwidthPolicy', () => {
@@ -107,9 +108,14 @@ describe('AllHighestVideoBandwidthPolicy', () => {
           ],
         })
       );
-
+      class TestObserver implements VideoDownlinkObserver {
+        wantsResubscribe(): void {}
+      }
+      const observer = new TestObserver();
+      policy.addObserver(observer);
       policy.updateIndex(index);
       expect(policy.wantsResubscribe()).to.equal(true);
+      policy.removeObserver(observer);
     });
   });
 

@@ -6,6 +6,7 @@ import DevicePixelRatioMonitor from '../devicepixelratiomonitor/DevicePixelRatio
 import DevicePixelRatioObserver from '../devicepixelratioobserver/DevicePixelRatioObserver';
 import DefaultModality from '../modality/DefaultModality';
 import AsyncScheduler from '../scheduler/AsyncScheduler';
+import SimulcastLayers from '../simulcastlayers/SimulcastLayers';
 import VideoTileController from '../videotilecontroller/VideoTileController';
 import VideoTile from './VideoTile';
 import VideoTileState from './VideoTileState';
@@ -179,6 +180,14 @@ export default class DefaultVideoTile implements DevicePixelRatioObserver, Video
     }
   }
 
+  updateVideoSimulcastStream(streamId: number, layer: SimulcastLayers): void {
+    if (this.tileState.streamId !== streamId || this.tileState.simulcastLayer !== layer) {
+      this.tileState.streamId = streamId;
+      this.tileState.simulcastLayer = layer;
+      this.sendTileStateUpdate();
+    }
+  }
+
   bindVideoElement(videoElement: HTMLVideoElement | null): void {
     let tileUpdated = false;
     if (this.tileState.boundVideoElement !== videoElement) {
@@ -214,6 +223,24 @@ export default class DefaultVideoTile implements DevicePixelRatioObserver, Video
     if (this.tileState.paused) {
       this.tileState.paused = false;
       this.sendTileStateUpdate();
+    }
+  }
+
+  pauseDueToBandwidth(): void {
+    if (!this.tileState.pausedDueToBandwidth) {
+      this.tileState.pausedDueToBandwidth = true;
+      if (this.tileState.boundAttendeeId !== null) {
+        this.sendTileStateUpdate();
+      }
+    }
+  }
+
+  unpauseDueToBandwidth(): void {
+    if (this.tileState.pausedDueToBandwidth) {
+      this.tileState.pausedDueToBandwidth = false;
+      if (this.tileState.boundAttendeeId !== null) {
+        this.sendTileStateUpdate();
+      }
     }
   }
 

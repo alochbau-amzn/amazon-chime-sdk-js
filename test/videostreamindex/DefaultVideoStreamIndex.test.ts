@@ -1005,6 +1005,48 @@ describe('DefaultVideoStreamIndex', () => {
     });
   });
 
+  describe('externalUserIdForAttendeeId', () => {
+    const indexFrame = new SdkIndexFrame({
+      sources: [
+        new SdkStreamDescriptor({
+          streamId: 1,
+          groupId: 1,
+          maxBitrateKbps: 100,
+          attendeeId: '688c',
+          externalUserId: '688c-ext',
+          mediaType: SdkStreamMediaType.VIDEO,
+        }),
+        new SdkStreamDescriptor({
+          streamId: 2,
+          groupId: 1,
+          maxBitrateKbps: 200,
+          attendeeId: '4d82',
+          mediaType: SdkStreamMediaType.VIDEO,
+        }),
+        new SdkStreamDescriptor({
+          streamId: 4,
+          groupId: 399,
+          maxBitrateKbps: 800,
+          attendeeId: 'a0ff',
+          externalUserId: 'a0ff-ext',
+          mediaType: SdkStreamMediaType.VIDEO,
+        }),
+      ],
+    });
+
+    it('Finds external user ID for attendee ID', () => {
+      expect(index.externalUserIdForAttendeeId('688c')).to.equal('');
+      index.integrateIndexFrame(indexFrame);
+      expect(index.externalUserIdForAttendeeId('688c')).to.equal('688c-ext');
+    });
+
+    it('returns empty string if externalUserId not in message', () => {
+      index.integrateIndexFrame(indexFrame);
+      expect(index.externalUserIdForAttendeeId('4d82')).to.equal('');
+      expect(index.externalUserIdForAttendeeId('abcd')).to.equal('');
+    });
+  });
+
   describe('attendeeIdForStreamId', () => {
     const indexFrame = new SdkIndexFrame({
       sources: [
