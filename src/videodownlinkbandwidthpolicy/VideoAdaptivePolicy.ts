@@ -219,6 +219,7 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
     }
 
     const lastProbeState = this.rateProbeState;
+    this.cleanBwPausedTiles(remoteInfos);
     this.handleAppPausedStreams(chosenStreams, remoteInfos);
 
     const sameStreamChoices = this.availStreamsSameAsLast(remoteInfos);
@@ -292,14 +293,14 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
     } else if (subscriptionChoice === UseReceiveSet.kPreProbe) {
       const subscribedRate = this.calculateSubscribeRate(this.preProbeNonPausedReceiveStreams);
       this.optimalReceiveStreams = this.preProbeReceiveStreams.slice();
-      this.processBwPausedStreams(this.preProbeNonPausedReceiveStreams);
+      this.processBwPausedStreams(remoteInfos, this.preProbeNonPausedReceiveStreams);
       this.logger.info('bwe: Use Pre-Probe subscription subscribedRate:' + subscribedRate);
       return;
     }
 
     this.optimalNonPausedReceiveStreams = chosenStreams.slice();
     const lastNumberPaused = this.pausedBwStreamIds.size();
-    this.processBwPausedStreams(chosenStreams);
+    this.processBwPausedStreams(remoteInfos, chosenStreams);
 
     const decisionLogStr = this.policyStateLogStr(remoteInfos, rates.targetDownlinkBitrate);
     if (
@@ -572,13 +573,8 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
           break;
 
         case RateProbeState.kProbePending:
-          if (sameSubscriptions && this.setProbeState(RateProbeState.kProbing)) {
+          if (this.setProbeState(RateProbeState.kProbing)) {
             this.timeBeforeAllowSubscribeMs = 800;
-            this.logger.info(
-              `bwe: Probe: sameSubscriptions:${sameSubscriptions} chosenStreams ${JSON.stringify(
-                chosenStreams
-              )}  upgradeStream: ${JSON.stringify(upgradeStream)}`
-            );
             this.upgradeToStream(chosenStreams, upgradeStream);
             useLastSubscriptions = UseReceiveSet.kNewOptimal;
           }
@@ -641,7 +637,10 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
     }
   }
 
-  private processBwPausedStreams(chosenStreams: VideoStreamDescription[]): void {
+  private processBwPausedStreams(
+    remoteInfos: VideoStreamDescription[],
+    chosenStreams: VideoStreamDescription[]
+  ): void {
     if (!this.tileController) {
       return;
     }
@@ -668,7 +667,9 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
               chosenStreams.push(info);
               this.pausedBwStreamIds.add(info.streamId);
             }
-          } else {
+          } else if (
+            remoteInfos.findIndex(stream => stream.attendeeId === preference.attendeeId) !== -1
+          ) {
             // Create a tile for this participant if one doesn't already exist and mark it as paused by bandwidth
             // Don't include it in the chosen streams because we don't want to subscribe for it then have to pause it.
             const externalUserId = this.videoIndex.externalUserIdForAttendeeId(
@@ -687,6 +688,31 @@ export default class VideoAdaptivePolicy implements VideoDownlinkBandwidthPolicy
         } else if (paused) {
           this.logger.info(`bwe: unpausing attendee ${preference.attendeeId} due to bandwidth`);
           this.tileController.unpauseVideoTileDueToBandwidth(videoTile.id());
+        }
+      }
+    }
+  }
+
+  private cleanBwPausedTiles(remoteInfos: VideoStreamDescription[]): void {
+    if (!this.tileController) {
+      return;
+    }
+    const tiles = this.tileController.getAllRemoteVideoTiles();
+    for (const tile of tiles) {
+      const state = tile.state();
+      if (!state.boundVideoStream) {
+        if (remoteInfos.findIndex(stream => stream.attendeeId === state.boundAttendeeId) === -1) {
+          this.tileController.removeVideoTile(state.tileId);
+          this.logger.info(
+            `bwe: Removed video tile ${state.tileId} for bw paused attendee ${state.boundAttendeeId}`
+          );
+        } else if (
+          this.videoPreferences !== undefined &&
+          this.videoPreferences.findIndex(
+            preference => preference.attendeeId === state.boundAttendeeId
+          ) === -1
+        ) {
+          this.tileController.removeVideoTile(state.tileId);
         }
       }
     }
